@@ -145,10 +145,8 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
         // Determine line prefix based on list type, tag, and heading
         var prefix = "";
-        var suffix = "";
         var isTodo = false;
         var isListItem = false;
-        var isNumbered = false;
 
         // Check for tag (To-Do)
         var tag = oe.Element(OneNoteNs + "Tag");
@@ -169,7 +167,6 @@ internal sealed partial class OneNotePageToMarkdownConverter
         {
             if (list.Element(OneNoteNs + "Number") is not null)
             {
-                isNumbered = true;
                 prefix = "1. ";
             }
             else
