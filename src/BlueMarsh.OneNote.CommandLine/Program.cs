@@ -18,8 +18,14 @@ var rootCommand = new RootCommand("CLI for Microsoft OneNote")
     new Command("page", "Manage pages")
     {
         PageListCommand.Create(),
+        PageExportCommand.Create(),
     },
 };
 
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
+
+
+
+
+

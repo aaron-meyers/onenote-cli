@@ -145,11 +145,17 @@ internal static class OneNoteRef
             if (section is not null)
             {
                 var sectionName = section.Attribute("name")?.Value ?? segment;
-                return new ResolvedRef(
-                    section.Attribute("ID")?.Value ?? "",
-                    sectionName,
-                    HierarchyNodeType.Section,
-                    $"{pathSoFar}/{sectionName}");
+                var sectionId = section.Attribute("ID")?.Value ?? "";
+                var sectionFullPath = $"{pathSoFar}/{sectionName}";
+
+                // If this is the last segment, return the section
+                if (i == segments.Length - 1)
+                {
+                    return new ResolvedRef(sectionId, sectionName, HierarchyNodeType.Section, sectionFullPath);
+                }
+
+                // Otherwise remaining segments must resolve to a page within this section
+                return ResolvePageInSection(oneNote, sectionId, sectionFullPath, segments[(i + 1)..]);
             }
 
             return null;
@@ -159,5 +165,32 @@ internal static class OneNoteRef
         var id = currentElement?.Attribute("ID")?.Value ?? "";
         var name = currentElement?.Attribute("name")?.Value ?? segments[^1];
         return new ResolvedRef(id, name, HierarchyNodeType.SectionGroup, pathSoFar);
+    }
+
+    private static ResolvedRef? ResolvePageInSection(
+        OneNoteApplication oneNote, string sectionId, string sectionPath, ReadOnlySpan<string> pageSegments)
+    {
+        // Currently only single-segment page names are supported
+        if (pageSegments.Length != 1)
+            return null;
+
+        var pageName = pageSegments[0];
+        var xml = oneNote.GetHierarchy(sectionId, HierarchyScope.Pages);
+        var doc = XDocument.Parse(xml);
+
+        var page = doc.Root?
+            .Elements(OneNoteNs + "Page")
+            .FirstOrDefault(e => (e.Attribute("name")?.Value ?? "")
+                .Equals(pageName, StringComparison.OrdinalIgnoreCase));
+
+        if (page is null)
+            return null;
+
+        var pageActualName = page.Attribute("name")?.Value ?? pageName;
+        return new ResolvedRef(
+            page.Attribute("ID")?.Value ?? "",
+            pageActualName,
+            HierarchyNodeType.Page,
+            $"{sectionPath}/{pageActualName}");
     }
 }

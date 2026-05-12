@@ -159,6 +159,16 @@ internal sealed class OneNoteApplication : IDisposable
     }
 
     /// <summary>
+    /// Returns the page content XML for the given page ID.
+    /// </summary>
+    public string GetPageContent(string pageId)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _application.GetPageContent(pageId, out var xml);
+        return xml;
+    }
+
+    /// <summary>
     /// Returns the hierarchy XML from OneNote at the given scope.
     /// </summary>
     public string GetHierarchy(string startNodeId, HierarchyScope scope)
