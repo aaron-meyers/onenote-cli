@@ -12,8 +12,10 @@ internal static class PageListCommand
             Description = "Notebook, section group, or section (name, ID, or path). Lists all if omitted",
             Arity = ArgumentArity.ZeroOrOne,
         };
-        var command = new Command("list", "List pages in a container");
-        command.Add(containerArg);
+        var command = new Command("list", "List pages in a container")
+        {
+            containerArg,
+        };
 
         command.SetAction(parseResult =>
         {

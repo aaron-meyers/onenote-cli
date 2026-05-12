@@ -18,9 +18,11 @@ internal static class PageExportCommand
             Description = "Output directory for exported Markdown files (defaults to current directory)",
         };
 
-        var command = new Command("export", "Export pages to Markdown files");
-        command.Add(refArg);
-        command.Add(outputDirOption);
+        var command = new Command("export", "Export pages to Markdown files")
+        {
+            refArg,
+            outputDirOption,
+        };
 
         command.SetAction(parseResult =>
         {
