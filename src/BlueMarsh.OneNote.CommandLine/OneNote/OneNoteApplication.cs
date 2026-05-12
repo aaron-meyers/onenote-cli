@@ -189,6 +189,53 @@ internal sealed class OneNoteApplication : IDisposable
             ?? [];
     }
 
+    /// <summary>
+    /// Finds a notebook by name (case-insensitive).
+    /// </summary>
+    public NotebookInfo? FindNotebook(string name)
+    {
+        return GetNotebooks()
+            .FirstOrDefault(n => n.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Returns the sections within a notebook, including sections inside section groups.
+    /// </summary>
+    public IReadOnlyList<SectionInfo> GetSections(string notebookId)
+    {
+        var xml = GetHierarchy(notebookId, HierarchyScope.Sections);
+        var doc = XDocument.Parse(xml);
+
+        var sections = new List<SectionInfo>();
+        CollectSections(doc.Root, sectionGroupPath: null, sections);
+        return sections;
+    }
+
+    private void CollectSections(XElement? element, string? sectionGroupPath, List<SectionInfo> sections)
+    {
+        if (element is null) return;
+
+        foreach (var child in element.Elements())
+        {
+            if (child.Name.LocalName == "SectionGroup")
+            {
+                var groupName = child.Attribute("name")?.Value ?? "";
+                var path = sectionGroupPath is null ? groupName : $"{sectionGroupPath}/{groupName}";
+                CollectSections(child, path, sections);
+            }
+            else if (child.Name.LocalName == "Section")
+            {
+                sections.Add(new SectionInfo(
+                    Id: child.Attribute("ID")?.Value ?? "",
+                    Name: child.Attribute("name")?.Value ?? "",
+                    Path: child.Attribute("path")?.Value ?? "",
+                    Color: child.Attribute("color")?.Value,
+                    SectionGroup: sectionGroupPath,
+                    LastModifiedTime: child.Attribute("lastModifiedTime")?.Value));
+            }
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -204,4 +251,12 @@ internal sealed record NotebookInfo(
     string? NickName,
     string Path,
     string? Color,
+    string? LastModifiedTime);
+
+internal sealed record SectionInfo(
+    string Id,
+    string Name,
+    string Path,
+    string? Color,
+    string? SectionGroup,
     string? LastModifiedTime);
