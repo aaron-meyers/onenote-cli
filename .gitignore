@@ -74,6 +74,9 @@ nunit-*.xml
 # Approval Tests result files
 *.received.*
 
+# Verify tooling swap files
+.*.swp
+
 # Build Results of an ATL Project
 [Dd]ebugPS/
 [Rr]eleasePS/
