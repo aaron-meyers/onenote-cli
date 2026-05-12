@@ -1,5 +1,6 @@
 using System.CommandLine;
 using System.Text;
+using System.Xml.Linq;
 using BlueMarsh.OneNote.CommandLine.Export;
 using BlueMarsh.OneNote.CommandLine.OneNote;
 
@@ -15,14 +16,19 @@ internal static class PageExportCommand
         };
         var outputDirOption = new Option<DirectoryInfo?>("--output-dir", "--out", "-o")
         {
-            Description = "Output directory for exported Markdown files (defaults to current directory)",
+            Description = "Output directory for exported files (defaults to current directory)",
         };
         outputDirOption.AcceptLegalFilePathsOnly();
+        var rawOption = new Option<bool>("--raw")
+        {
+            Description = "Export raw OneNote XML instead of Markdown",
+        };
 
-        var command = new Command("export", "Export pages to Markdown files")
+        var command = new Command("export", "Export pages to Markdown or XML files")
         {
             refArg,
             outputDirOption,
+            rawOption,
         };
 
         command.SetAction(parseResult =>
@@ -30,6 +36,7 @@ internal static class PageExportCommand
             var refString = parseResult.GetValue(refArg)!;
             var outputDir = parseResult.GetValue(outputDirOption)
                 ?? new DirectoryInfo(Directory.GetCurrentDirectory());
+            var raw = parseResult.GetValue(rawOption);
 
             if (!outputDir.Exists)
                 outputDir.Create();
@@ -43,8 +50,12 @@ internal static class PageExportCommand
                 return;
             }
 
-            var converter = new OneNotePageToMarkdownConverter(
-                warn: msg => Console.Error.WriteLine($"Warning: {msg}"));
+            OneNotePageToMarkdownConverter? converter = null;
+            if (!raw)
+            {
+                converter = new OneNotePageToMarkdownConverter(
+                    warn: msg => Console.Error.WriteLine($"Warning: {msg}"));
+            }
 
             switch (resolved.NodeType)
             {
@@ -66,22 +77,45 @@ internal static class PageExportCommand
         return command;
     }
 
+    private static void ExportPage(
+        OneNoteApplication oneNote,
+        OneNotePageToMarkdownConverter? converter,
+        string pageId,
+        string pageName,
+        DirectoryInfo outputDir)
+    {
+        var pageXml = oneNote.GetPageContent(pageId);
+
+        string content;
+        string extension;
+        if (converter is not null)
+        {
+            content = converter.Convert(pageXml);
+            extension = ".md";
+        }
+        else
+        {
+            content = XDocument.Parse(pageXml).ToString();
+            extension = ".xml";
+        }
+
+        var filePath = Path.Combine(outputDir.FullName, SanitizeFileName(pageName) + extension);
+        File.WriteAllText(filePath, content, Encoding.UTF8);
+        Console.WriteLine(filePath);
+    }
+
     private static void ExportSinglePage(
         OneNoteApplication oneNote,
-        OneNotePageToMarkdownConverter converter,
+        OneNotePageToMarkdownConverter? converter,
         ResolvedRef pageRef,
         DirectoryInfo outputDir)
     {
-        var pageXml = oneNote.GetPageContent(pageRef.Id);
-        var markdown = converter.Convert(pageXml);
-        var filePath = Path.Combine(outputDir.FullName, SanitizeFileName(pageRef.Name) + ".md");
-        File.WriteAllText(filePath, markdown, Encoding.UTF8);
-        Console.WriteLine(filePath);
+        ExportPage(oneNote, converter, pageRef.Id, pageRef.Name, outputDir);
     }
 
     private static void ExportSection(
         OneNoteApplication oneNote,
-        OneNotePageToMarkdownConverter converter,
+        OneNotePageToMarkdownConverter? converter,
         string sectionId,
         string sectionName,
         DirectoryInfo outputDir)
@@ -91,17 +125,13 @@ internal static class PageExportCommand
 
         foreach (var page in pages)
         {
-            var pageXml = oneNote.GetPageContent(page.Id);
-            var markdown = converter.Convert(pageXml);
-            var filePath = Path.Combine(sectionDir.FullName, SanitizeFileName(page.Name) + ".md");
-            File.WriteAllText(filePath, markdown, Encoding.UTF8);
-            Console.WriteLine(filePath);
+            ExportPage(oneNote, converter, page.Id, page.Name, sectionDir);
         }
     }
 
     private static void ExportContainer(
         OneNoteApplication oneNote,
-        OneNotePageToMarkdownConverter converter,
+        OneNotePageToMarkdownConverter? converter,
         ResolvedRef container,
         DirectoryInfo outputDir)
     {
@@ -121,11 +151,7 @@ internal static class PageExportCommand
             var pages = oneNote.GetPages(section.Id);
             foreach (var page in pages)
             {
-                var pageXml = oneNote.GetPageContent(page.Id);
-                var markdown = converter.Convert(pageXml);
-                var filePath = Path.Combine(sectionDir.FullName, SanitizeFileName(page.Name) + ".md");
-                File.WriteAllText(filePath, markdown, Encoding.UTF8);
-                Console.WriteLine(filePath);
+                ExportPage(oneNote, converter, page.Id, page.Name, sectionDir);
             }
         }
     }

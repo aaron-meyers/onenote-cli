@@ -1,4 +1,4 @@
-using System.CommandLine;
+﻿using System.CommandLine;
 using System.Text;
 using BlueMarsh.OneNote.CommandLine.Commands;
 
@@ -24,6 +24,7 @@ var rootCommand = new RootCommand("CLI for Microsoft OneNote")
 
 var parseResult = rootCommand.Parse(args);
 return await parseResult.InvokeAsync();
+
 
 
 

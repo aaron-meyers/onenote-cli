@@ -339,7 +339,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
             var tag = html.AsSpan(tagStart, tagEnd - tagStart + 1);
 
-            if (tag.StartsWith("<span".AsSpan(), StringComparison.OrdinalIgnoreCase))
+            if (StartsWithTag(tag, "span"))
             {
                 var style = ExtractAttribute(tag, "style");
                 var (mdOpen, mdClose) = ParseStyleToMarkdown(style);
@@ -358,13 +358,13 @@ internal sealed partial class OneNotePageToMarkdownConverter
                     continue;
                 }
             }
-            else if (tag.StartsWith("<br".AsSpan(), StringComparison.OrdinalIgnoreCase))
+            else if (StartsWithTag(tag, "br"))
             {
                 result.Append("  \n");
                 pos = tagEnd + 1;
                 continue;
             }
-            else if (tag.StartsWith("<a ".AsSpan(), StringComparison.OrdinalIgnoreCase))
+            else if (StartsWithTag(tag, "a"))
             {
                 var href = ExtractAttribute(tag, "href");
                 var anchorEnd = html.IndexOf("</a>", tagEnd, StringComparison.OrdinalIgnoreCase);
@@ -386,6 +386,14 @@ internal sealed partial class OneNotePageToMarkdownConverter
         }
 
         return result.ToString();
+    }
+
+    private static bool StartsWithTag(ReadOnlySpan<char> tag, string tagName)
+    {
+        if (!tag.StartsWith($"<{tagName}".AsSpan(), StringComparison.OrdinalIgnoreCase))
+            return false;
+        var nextCharIndex = 1 + tagName.Length;
+        return nextCharIndex >= tag.Length || !char.IsLetter(tag[nextCharIndex]);
     }
 
     private static ReadOnlySpan<char> ExtractAttribute(ReadOnlySpan<char> tag, string attrName)
