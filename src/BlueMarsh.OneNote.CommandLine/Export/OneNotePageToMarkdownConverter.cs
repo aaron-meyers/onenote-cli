@@ -107,17 +107,53 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
     private void VisitOEChildren(XElement oeChildren, int depth)
     {
-        foreach (var child in oeChildren.Elements())
+        var children = oeChildren.Elements().ToList();
+        for (var i = 0; i < children.Count; i++)
         {
+            var child = children[i];
             if (child.Name.LocalName == "OE")
             {
-                VisitOE(child, depth);
+                if (IsCodeStyle(child))
+                {
+                    // Collect consecutive code-styled OEs
+                    var codeLines = new List<string>();
+                    while (i < children.Count && children[i].Name.LocalName == "OE" && IsCodeStyle(children[i]))
+                    {
+                        codeLines.Add(ExtractTextFromOE(children[i]));
+                        i++;
+                    }
+                    i--; // Back up since for loop will increment
+
+                    if (codeLines.Count == 1 && !codeLines[0].Contains('\n'))
+                    {
+                        _output.AppendLine($"`{codeLines[0]}`");
+                    }
+                    else
+                    {
+                        _output.AppendLine("```");
+                        foreach (var line in codeLines)
+                            _output.AppendLine(line);
+                        _output.AppendLine("```");
+                    }
+                    _output.AppendLine();
+                }
+                else
+                {
+                    VisitOE(child, depth);
+                }
             }
             else if (!HandledElements.Contains(child.Name.LocalName))
             {
                 _warn($"Unhandled element in OEChildren: <{child.Name.LocalName}>");
             }
         }
+    }
+
+    private bool IsCodeStyle(XElement oe)
+    {
+        var quickStyleIndex = int.Parse(oe.Attribute("quickStyleIndex")?.Value ?? "-1");
+        return _quickStyles.TryGetValue(quickStyleIndex, out var style) &&
+               style.Name.Equals("code", StringComparison.OrdinalIgnoreCase);
     }
 
     private void VisitOE(XElement oe, int depth)
