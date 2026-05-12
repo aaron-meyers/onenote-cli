@@ -243,7 +243,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
         }
         else if (isTodo || isListItem)
         {
-            var indent = new string(' ', depth * 2);
+            var indent = new string(' ', depth * 4);
             if (!string.IsNullOrEmpty(text) || isTodo)
             {
                 _output.AppendLine($"{indent}{prefix}{text}");
