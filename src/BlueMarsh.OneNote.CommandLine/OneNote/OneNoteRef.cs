@@ -59,7 +59,7 @@ internal static class OneNoteRef
         return resolved;
     }
 
-    private static bool IsId(string refString) => refString.Contains('{');
+    private static bool IsId(string refString) => refString.StartsWith('{') && refString.EndsWith('}');
 
     private static ResolvedRef? ResolveById(OneNoteApplication oneNote, string id)
     {

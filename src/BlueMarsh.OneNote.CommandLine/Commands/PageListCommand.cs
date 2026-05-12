@@ -12,20 +12,26 @@ internal static class PageListCommand
             Description = "Notebook, section group, or section (name, ID, or path). Lists all if omitted",
             Arity = ArgumentArity.ZeroOrOne,
         };
+        var idOption = new Option<bool>("--id")
+        {
+            Description = "Show object IDs",
+        };
         var command = new Command("list", "List pages in a container")
         {
             containerArg,
+            idOption,
         };
 
         command.SetAction(parseResult =>
         {
             var containerRef = parseResult.GetValue(containerArg);
+            var showId = parseResult.GetValue(idOption);
 
             using var oneNote = new OneNoteApplication();
 
             if (containerRef is null)
             {
-                ListAllPages(oneNote);
+                ListAllPages(oneNote, showId);
             }
             else
             {
@@ -42,14 +48,14 @@ internal static class PageListCommand
                     return;
                 }
 
-                ListPages(oneNote, resolved);
+                ListPages(oneNote, resolved, showId);
             }
         });
 
         return command;
     }
 
-    private static void ListAllPages(OneNoteApplication oneNote)
+    private static void ListAllPages(OneNoteApplication oneNote, bool showId)
     {
         foreach (var notebook in oneNote.GetNotebooks())
         {
@@ -63,17 +69,20 @@ internal static class PageListCommand
                 var pages = oneNote.GetPages(section.Id);
                 foreach (var page in pages)
                 {
-                    Console.WriteLine($"{sectionPath}/{page.Name}");
+                    if (showId)
+                        Console.WriteLine($"{sectionPath}/{page.Name} {page.Id}");
+                    else
+                        Console.WriteLine($"{sectionPath}/{page.Name}");
                 }
             }
         }
     }
 
-    private static void ListPages(OneNoteApplication oneNote, ResolvedRef container)
+    private static void ListPages(OneNoteApplication oneNote, ResolvedRef container, bool showId)
     {
         if (container.NodeType == HierarchyNodeType.Section)
         {
-            ListPagesInSection(oneNote, container.Id);
+            ListPagesInSection(oneNote, container.Id, showId);
         }
         else
         {
@@ -88,19 +97,25 @@ internal static class PageListCommand
                 var pages = oneNote.GetPages(section.Id);
                 foreach (var page in pages)
                 {
-                    Console.WriteLine($"{sectionPath}/{page.Name}");
+                    if (showId)
+                        Console.WriteLine($"{sectionPath}/{page.Name} {page.Id}");
+                    else
+                        Console.WriteLine($"{sectionPath}/{page.Name}");
                 }
             }
         }
     }
 
-    private static void ListPagesInSection(OneNoteApplication oneNote, string sectionId)
+    private static void ListPagesInSection(OneNoteApplication oneNote, string sectionId, bool showId)
     {
         var pages = oneNote.GetPages(sectionId);
         foreach (var page in pages)
         {
             var indent = new string(' ', (page.Level - 1) * 2);
-            Console.WriteLine($"{indent}{page.Name}");
+            if (showId)
+                Console.WriteLine($"{indent}{page.Name} {page.Id}");
+            else
+                Console.WriteLine($"{indent}{page.Name}");
         }
     }
 }

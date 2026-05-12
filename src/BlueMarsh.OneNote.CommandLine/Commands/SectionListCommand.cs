@@ -12,20 +12,26 @@ internal static class SectionListCommand
             Description = "Notebook or section group (name, ID, or path). Lists all if omitted.",
             Arity = ArgumentArity.ZeroOrOne,
         };
+        var idOption = new Option<bool>("--id")
+        {
+            Description = "Show object IDs",
+        };
         var command = new Command("list", "List sections in a container")
         {
             containerArg,
+            idOption,
         };
 
         command.SetAction(parseResult =>
         {
             var containerRef = parseResult.GetValue(containerArg);
+            var showId = parseResult.GetValue(idOption);
 
             using var oneNote = new OneNoteApplication();
 
             if (containerRef is null)
             {
-                ListAllSections(oneNote);
+                ListAllSections(oneNote, showId);
             }
             else
             {
@@ -36,14 +42,14 @@ internal static class SectionListCommand
                     return;
                 }
 
-                ListSectionsInContainer(oneNote, resolved);
+                ListSectionsInContainer(oneNote, resolved, showId);
             }
         });
 
         return command;
     }
 
-    private static void ListAllSections(OneNoteApplication oneNote)
+    private static void ListAllSections(OneNoteApplication oneNote, bool showId)
     {
         foreach (var notebook in oneNote.GetNotebooks())
         {
@@ -53,20 +59,26 @@ internal static class SectionListCommand
                 var path = section.SectionGroup is not null
                     ? $"{notebook.Name}/{section.SectionGroup}/{section.Name}"
                     : $"{notebook.Name}/{section.Name}";
-                Console.WriteLine(path);
+                if (showId)
+                    Console.WriteLine($"{path} {section.Id}");
+                else
+                    Console.WriteLine(path);
             }
         }
     }
 
-    private static void ListSectionsInContainer(OneNoteApplication oneNote, ResolvedRef container)
+    private static void ListSectionsInContainer(OneNoteApplication oneNote, ResolvedRef container, bool showId)
     {
         var sections = oneNote.GetSections(container.Id);
         foreach (var section in sections)
         {
-            if (section.SectionGroup is not null)
-                Console.WriteLine($"{section.SectionGroup}/{section.Name}");
+            var name = section.SectionGroup is not null
+                ? $"{section.SectionGroup}/{section.Name}"
+                : section.Name;
+            if (showId)
+                Console.WriteLine($"{name} {section.Id}");
             else
-                Console.WriteLine(section.Name);
+                Console.WriteLine(name);
         }
     }
 }
