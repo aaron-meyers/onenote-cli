@@ -396,11 +396,11 @@ internal sealed partial class OneNotePageToMarkdownConverter
         var search = $"{attrName}=".AsSpan();
         var idx = tag.IndexOf(search, StringComparison.OrdinalIgnoreCase);
         if (idx < 0)
-            return ReadOnlySpan<char>.Empty;
+            return [];
 
         idx += search.Length;
         if (idx >= tag.Length)
-            return ReadOnlySpan<char>.Empty;
+            return [];
 
         var quote = tag[idx];
         if (quote is '\'' or '"')
@@ -411,7 +411,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
                 return tag.Slice(idx, end);
         }
 
-        return ReadOnlySpan<char>.Empty;
+        return [];
     }
 
     private static (string open, string close) ParseStyleToMarkdown(ReadOnlySpan<char> style)
