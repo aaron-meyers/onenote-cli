@@ -7,46 +7,64 @@ internal static class SectionListCommand
 {
     public static Command Create()
     {
-        var notebookArg = new Argument<string?>("notebook") { Description = "Name of the notebook (lists all if omitted)", Arity = ArgumentArity.ZeroOrOne };
-        var command = new Command("list", "List sections in a notebook");
-        command.Add(notebookArg);
+        var containerArg = new Argument<string?>("container-ref")
+        {
+            Description = "Notebook or section group (name, ID, or path). Lists all if omitted",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var command = new Command("list", "List sections in a container");
+        command.Add(containerArg);
 
         command.SetAction(parseResult =>
         {
-            var notebookName = parseResult.GetValue(notebookArg);
+            var containerRef = parseResult.GetValue(containerArg);
 
             using var oneNote = new OneNoteApplication();
-            var notebooks = oneNote.GetNotebooks();
 
-            IEnumerable<NotebookInfo> targets;
-            if (notebookName is not null)
+            if (containerRef is null)
             {
-                var notebook = notebooks.FirstOrDefault(n => n.Name.Equals(notebookName, StringComparison.OrdinalIgnoreCase));
-                if (notebook is null)
-                {
-                    Console.Error.WriteLine($"Notebook '{notebookName}' not found.");
-                    return;
-                }
-                targets = [notebook];
+                ListAllSections(oneNote);
             }
             else
             {
-                targets = notebooks;
-            }
-
-            foreach (var notebook in targets)
-            {
-                var sections = oneNote.GetSections(notebook.Id);
-                foreach (var section in sections)
+                var resolved = OneNoteRef.ResolveContainer(oneNote, containerRef);
+                if (resolved is null)
                 {
-                    var path = section.SectionGroup is not null
-                        ? $"{notebook.Name}/{section.SectionGroup}/{section.Name}"
-                        : $"{notebook.Name}/{section.Name}";
-                    Console.WriteLine(path);
+                    Console.Error.WriteLine($"Container '{containerRef}' not found. Must be a notebook or section group.");
+                    return;
                 }
+
+                ListSectionsInContainer(oneNote, resolved);
             }
         });
 
         return command;
+    }
+
+    private static void ListAllSections(OneNoteApplication oneNote)
+    {
+        foreach (var notebook in oneNote.GetNotebooks())
+        {
+            var sections = oneNote.GetSections(notebook.Id);
+            foreach (var section in sections)
+            {
+                var path = section.SectionGroup is not null
+                    ? $"{notebook.Name}/{section.SectionGroup}/{section.Name}"
+                    : $"{notebook.Name}/{section.Name}";
+                Console.WriteLine(path);
+            }
+        }
+    }
+
+    private static void ListSectionsInContainer(OneNoteApplication oneNote, ResolvedRef container)
+    {
+        var sections = oneNote.GetSections(container.Id);
+        foreach (var section in sections)
+        {
+            if (section.SectionGroup is not null)
+                Console.WriteLine($"{section.SectionGroup}/{section.Name}");
+            else
+                Console.WriteLine(section.Name);
+        }
     }
 }
