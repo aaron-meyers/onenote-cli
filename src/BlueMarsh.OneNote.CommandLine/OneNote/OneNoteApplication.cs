@@ -247,6 +247,24 @@ internal sealed class OneNoteApplication : IDisposable
     }
 
     /// <summary>
+    /// Returns pages currently being viewed in OneNote windows.
+    /// </summary>
+    public IReadOnlyList<PageInfo> GetCurrentPages()
+    {
+        var xml = GetHierarchy("", HierarchyScope.Pages);
+        var doc = XDocument.Parse(xml);
+
+        return doc.Descendants(OneNoteNs + "Page")
+            .Where(e => e.Attribute("isCurrentlyViewed")?.Value == "true")
+            .Select(e => new PageInfo(
+                Id: e.Attribute("ID")?.Value ?? "",
+                Name: e.Attribute("name")?.Value ?? "",
+                Level: int.TryParse(e.Attribute("pageLevel")?.Value, out var lvl) ? lvl : 1,
+                LastModifiedTime: e.Attribute("lastModifiedTime")?.Value))
+            .ToList();
+    }
+
+    /// <summary>
     /// Returns pages within a section.
     /// </summary>
     public IReadOnlyList<PageInfo> GetPages(string sectionId)

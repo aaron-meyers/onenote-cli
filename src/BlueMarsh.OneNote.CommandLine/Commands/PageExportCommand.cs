@@ -10,9 +10,14 @@ internal static class PageExportCommand
 {
     public static Command Create()
     {
-        var refArg = new Argument<string>("ref")
+        var refArg = new Argument<string?>("ref")
         {
             Description = "Page, section, section group, or notebook (name, ID, or path)",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var currentOption = new Option<bool>("--current", "-c")
+        {
+            Description = "Export pages currently open in OneNote",
         };
         var outputDirOption = new Option<DirectoryInfo?>("--output-dir", "--out", "-o")
         {
@@ -27,34 +32,65 @@ internal static class PageExportCommand
         var command = new Command("export", "Export pages to Markdown or XML files")
         {
             refArg,
+            currentOption,
             outputDirOption,
             rawOption,
         };
 
         command.SetAction(parseResult =>
         {
-            var refString = parseResult.GetValue(refArg)!;
+            var refString = parseResult.GetValue(refArg);
+            var current = parseResult.GetValue(currentOption);
             var outputDir = parseResult.GetValue(outputDirOption)
                 ?? new DirectoryInfo(Directory.GetCurrentDirectory());
             var raw = parseResult.GetValue(rawOption);
+
+            if (current && refString is not null)
+            {
+                Console.Error.WriteLine("Cannot use --current with a ref argument.");
+                return;
+            }
+
+            if (!current && refString is null)
+            {
+                Console.Error.WriteLine("Either a ref argument or --current must be specified.");
+                return;
+            }
 
             if (!outputDir.Exists)
                 outputDir.Create();
 
             using var oneNote = new OneNoteApplication();
 
-            var resolved = OneNoteRef.Resolve(oneNote, refString);
-            if (resolved is null)
-            {
-                Console.Error.WriteLine($"'{refString}' not found.");
-                return;
-            }
-
             OneNotePageToMarkdownConverter? converter = null;
             if (!raw)
             {
                 converter = new OneNotePageToMarkdownConverter(
                     warn: msg => Console.Error.WriteLine($"Warning: {msg}"));
+            }
+
+            if (current)
+            {
+                var pages = oneNote.GetCurrentPages();
+                if (pages.Count == 0)
+                {
+                    Console.Error.WriteLine("No pages are currently open in OneNote.");
+                    return;
+                }
+
+                foreach (var page in pages)
+                {
+                    ExportPage(oneNote, converter, page.Id, page.Name, outputDir);
+                }
+
+                return;
+            }
+
+            var resolved = OneNoteRef.Resolve(oneNote, refString!);
+            if (resolved is null)
+            {
+                Console.Error.WriteLine($"'{refString}' not found.");
+                return;
             }
 
             switch (resolved.NodeType)
