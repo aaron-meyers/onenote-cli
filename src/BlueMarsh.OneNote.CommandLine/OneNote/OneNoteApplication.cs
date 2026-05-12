@@ -49,7 +49,7 @@ internal interface IOneNoteApplication
     void GetPageContent(
         [In, MarshalAs(UnmanagedType.BStr)] string bstrPageID,
         [Out, MarshalAs(UnmanagedType.BStr)] out string pbstrPageXmlOut,
-        [In, Optional, DefaultParameterValue(PageInfo.piBasic)] PageInfo pageInfoToExport,
+        [In, Optional, DefaultParameterValue(PageInfoScope.piBasic)] PageInfoScope pageInfoToExport,
         [In, Optional, DefaultParameterValue(XMLSchema.xs2013)] XMLSchema xsSchema);
 
     void UpdatePageContent(
@@ -236,6 +236,25 @@ internal sealed class OneNoteApplication : IDisposable
         }
     }
 
+    /// <summary>
+    /// Returns pages within a section.
+    /// </summary>
+    public IReadOnlyList<PageInfo> GetPages(string sectionId)
+    {
+        var xml = GetHierarchy(sectionId, HierarchyScope.Pages);
+        var doc = XDocument.Parse(xml);
+
+        return doc.Root?
+            .Elements(OneNoteNs + "Page")
+            .Select(e => new PageInfo(
+                Id: e.Attribute("ID")?.Value ?? "",
+                Name: e.Attribute("name")?.Value ?? "",
+                Level: int.TryParse(e.Attribute("pageLevel")?.Value, out var lvl) ? lvl : 1,
+                LastModifiedTime: e.Attribute("lastModifiedTime")?.Value))
+            .ToList()
+            ?? [];
+    }
+
     public void Dispose()
     {
         if (_disposed) return;
@@ -259,4 +278,10 @@ internal sealed record SectionInfo(
     string Path,
     string? Color,
     string? SectionGroup,
+    string? LastModifiedTime);
+
+internal sealed record PageInfo(
+    string Id,
+    string Name,
+    int Level,
     string? LastModifiedTime);

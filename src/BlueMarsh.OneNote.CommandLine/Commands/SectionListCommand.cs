@@ -9,11 +9,13 @@ internal static class SectionListCommand
     {
         var containerArg = new Argument<string?>("container-ref")
         {
-            Description = "Notebook or section group (name, ID, or path). Lists all if omitted",
+            Description = "Notebook or section group (name, ID, or path). Lists all if omitted.",
             Arity = ArgumentArity.ZeroOrOne,
         };
-        var command = new Command("list", "List sections in a container");
-        command.Add(containerArg);
+        var command = new Command("list", "List sections in a container")
+        {
+            containerArg,
+        };
 
         command.SetAction(parseResult =>
         {

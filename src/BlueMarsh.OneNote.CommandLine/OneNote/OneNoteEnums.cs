@@ -35,7 +35,7 @@ internal enum NewPageStyle
     npsBlankPageNoTitle = 2,
 }
 
-internal enum PageInfo
+internal enum PageInfoScope
 {
     piBasic = 0,
     piBinaryData = 1,
