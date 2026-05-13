@@ -63,6 +63,7 @@ Tests use [TUnit](https://github.com/thomhurst/TUnit) with [Verify](https://gith
 
 ## Related projects
 - [onenote-cli](https://github.com/snomiao/onenote-cli) - Node.js CLI based on Microsoft Graph API for OneNote Online which similarly provides export of OneNote content to markdown. The Graph endpoints work with "OneNote-flavored HTML" rather than the [MS-ONE](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-one/73d22548-a613-4350-8c23-07d15576be50) XML format exposed by the Windows COM interface. My primary motivation for building a new project based on the COM interface is that I cannot access my enterprise notebooks via Microsoft Graph due to corporate IT restrictions.
+- [OneNote to Markdown Exporter](https://github.com/segunak/one-note-to-markdown) - just discovered this as I was adding tags to my repo. Looks like it takes largely the same approach with the same goals as my project. I'll go ahead and archive mine if I end up switching to this instead.
 
 ## License
 
