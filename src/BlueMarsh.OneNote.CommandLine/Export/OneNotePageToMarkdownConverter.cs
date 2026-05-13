@@ -20,6 +20,9 @@ internal sealed record MarkdownConversionSettings
 
     /// <summary>If true, include the updated date in YAML frontmatter.</summary>
     public bool IncludeUpdatedDate { get; init; }
+
+    /// <summary>If true, write dates in UTC with a 'Z' suffix; otherwise use local timezone.</summary>
+    public bool UtcDates { get; init; }
 }
 
 /// <summary>
@@ -84,14 +87,14 @@ internal sealed partial class OneNotePageToMarkdownConverter
         {
             var created = page.Attribute("dateTime")?.Value;
             if (created is not null && DateTimeOffset.TryParse(created, out var createdDate))
-                frontmatterProps.Add($"created: {createdDate.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss}");
+                frontmatterProps.Add($"created: {FormatDate(createdDate, settings.UtcDates)}");
         }
 
         if (settings.IncludeUpdatedDate)
         {
             var updated = page.Attribute("lastModifiedTime")?.Value;
             if (updated is not null && DateTimeOffset.TryParse(updated, out var updatedDate))
-                frontmatterProps.Add($"updated: {updatedDate.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss}");
+                frontmatterProps.Add($"updated: {FormatDate(updatedDate, settings.UtcDates)}");
         }
 
         if (frontmatterProps.Count > 0)
@@ -106,6 +109,13 @@ internal sealed partial class OneNotePageToMarkdownConverter
     private static string EscapeYamlString(string value)
     {
         return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    private static string FormatDate(DateTimeOffset date, bool utc)
+    {
+        var dt = utc ? date.UtcDateTime : date.LocalDateTime;
+        var formatted = $"{dt:yyyy-MM-dd'T'HH:mm}:00";
+        return utc ? formatted + "Z" : formatted;
     }
 
     private string? VisitPage(XElement page)

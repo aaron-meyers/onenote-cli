@@ -336,7 +336,7 @@ public class OneNotePageToMarkdownConverterTests
             """;
 
         var converter = new OneNotePageToMarkdownConverter(w => { });
-        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeCreatedDate = true }));
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeCreatedDate = true, UtcDates = true }));
     }
 
     [Test]
@@ -361,7 +361,7 @@ public class OneNotePageToMarkdownConverterTests
             """;
 
         var converter = new OneNotePageToMarkdownConverter(w => { });
-        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeUpdatedDate = true }));
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeUpdatedDate = true, UtcDates = true }));
     }
 
     [Test]
@@ -391,6 +391,7 @@ public class OneNotePageToMarkdownConverterTests
             IncludeTitleProperty = true,
             IncludeCreatedDate = true,
             IncludeUpdatedDate = true,
+            UtcDates = true,
         }));
     }
 }

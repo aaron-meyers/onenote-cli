@@ -79,6 +79,10 @@ internal static class PageExportCommand
             Description = "Which dates to include in frontmatter: both (default), created, updated, or none",
             DefaultValueFactory = _ => DatesMode.Both,
         };
+        var utcOption = new Option<bool>("--utc", "--utc-dates")
+        {
+            Description = "Write dates in UTC with 'Z' suffix instead of local timezone",
+        };
 
         var command = new Command("export", "Export pages to Markdown or XML files")
         {
@@ -88,6 +92,7 @@ internal static class PageExportCommand
             rawOption,
             titleOption,
             datesOption,
+            utcOption,
         };
 
         command.SetAction(parseResult =>
@@ -99,6 +104,7 @@ internal static class PageExportCommand
             var raw = parseResult.GetValue(rawOption);
             var titleMode = parseResult.GetValue(titleOption);
             var datesMode = parseResult.GetValue(datesOption);
+            var utcDates = parseResult.GetValue(utcOption);
 
             if (current && refString is not null)
             {
@@ -124,6 +130,8 @@ internal static class PageExportCommand
                     warn: msg => Console.Error.WriteLine($"Warning: {msg}"));
             }
 
+            var exportOptions = new ExportOptions(titleMode, datesMode, utcDates);
+
             if (current)
             {
                 var pages = oneNote.GetCurrentPages();
@@ -135,7 +143,7 @@ internal static class PageExportCommand
 
                 foreach (var page in pages)
                 {
-                    ExportPage(oneNote, converter, titleMode, datesMode, page.Id, page.Name, outputDir);
+                    ExportPage(oneNote, converter, exportOptions, page.Id, page.Name, outputDir);
                 }
 
                 return;
@@ -151,16 +159,16 @@ internal static class PageExportCommand
             switch (resolved.NodeType)
             {
                 case HierarchyNodeType.Page:
-                    ExportSinglePage(oneNote, converter, titleMode, datesMode, resolved, outputDir);
+                    ExportSinglePage(oneNote, converter, exportOptions, resolved, outputDir);
                     break;
 
                 case HierarchyNodeType.Section:
-                    ExportSection(oneNote, converter, titleMode, datesMode, resolved.Id, resolved.Name, outputDir);
+                    ExportSection(oneNote, converter, exportOptions, resolved.Id, resolved.Name, outputDir);
                     break;
 
                 case HierarchyNodeType.SectionGroup:
                 case HierarchyNodeType.Notebook:
-                    ExportContainer(oneNote, converter, titleMode, datesMode, resolved, outputDir);
+                    ExportContainer(oneNote, converter, exportOptions, resolved, outputDir);
                     break;
             }
         });
@@ -168,11 +176,12 @@ internal static class PageExportCommand
         return command;
     }
 
+    private sealed record ExportOptions(TitleMode TitleMode, DatesMode DatesMode, bool UtcDates);
+
     private static void ExportPage(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
-        TitleMode titleMode,
-        DatesMode datesMode,
+        ExportOptions options,
         string pageId,
         string pageName,
         DirectoryInfo outputDir)
@@ -186,15 +195,16 @@ internal static class PageExportCommand
         {
             var settings = new MarkdownConversionSettings
             {
-                IncludeTitleProperty = titleMode switch
+                IncludeTitleProperty = options.TitleMode switch
                 {
                     TitleMode.Property => true,
                     TitleMode.Auto => sanitizedName != pageName,
                     _ => false,
                 },
-                IncludeTitleHeading = titleMode == TitleMode.Heading,
-                IncludeCreatedDate = datesMode is DatesMode.Both or DatesMode.Created,
-                IncludeUpdatedDate = datesMode is DatesMode.Both or DatesMode.Updated,
+                IncludeTitleHeading = options.TitleMode == TitleMode.Heading,
+                IncludeCreatedDate = options.DatesMode is DatesMode.Both or DatesMode.Created,
+                IncludeUpdatedDate = options.DatesMode is DatesMode.Both or DatesMode.Updated,
+                UtcDates = options.UtcDates,
             };
 
             content = converter.Convert(pageXml, settings);
@@ -214,19 +224,17 @@ internal static class PageExportCommand
     private static void ExportSinglePage(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
-        TitleMode titleMode,
-        DatesMode datesMode,
+        ExportOptions options,
         ResolvedRef pageRef,
         DirectoryInfo outputDir)
     {
-        ExportPage(oneNote, converter, titleMode, datesMode, pageRef.Id, pageRef.Name, outputDir);
+        ExportPage(oneNote, converter, options, pageRef.Id, pageRef.Name, outputDir);
     }
 
     private static void ExportSection(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
-        TitleMode titleMode,
-        DatesMode datesMode,
+        ExportOptions options,
         string sectionId,
         string sectionName,
         DirectoryInfo outputDir)
@@ -236,15 +244,14 @@ internal static class PageExportCommand
 
         foreach (var page in pages)
         {
-            ExportPage(oneNote, converter, titleMode, datesMode, page.Id, page.Name, sectionDir);
+            ExportPage(oneNote, converter, options, page.Id, page.Name, sectionDir);
         }
     }
 
     private static void ExportContainer(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
-        TitleMode titleMode,
-        DatesMode datesMode,
+        ExportOptions options,
         ResolvedRef container,
         DirectoryInfo outputDir)
     {
@@ -264,7 +271,7 @@ internal static class PageExportCommand
             var pages = oneNote.GetPages(section.Id);
             foreach (var page in pages)
             {
-                ExportPage(oneNote, converter, titleMode, datesMode, page.Id, page.Name, sectionDir);
+                ExportPage(oneNote, converter, options, page.Id, page.Name, sectionDir);
             }
         }
     }
