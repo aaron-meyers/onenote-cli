@@ -5,6 +5,24 @@ using System.Xml.Linq;
 namespace BlueMarsh.OneNote.CommandLine.Export;
 
 /// <summary>
+/// Settings controlling how a OneNote page is converted to Markdown.
+/// </summary>
+internal sealed record MarkdownConversionSettings
+{
+    /// <summary>If true, write the title as a YAML frontmatter property.</summary>
+    public bool IncludeTitleProperty { get; init; }
+
+    /// <summary>If true, render the title as a # heading and offset content headings by +1.</summary>
+    public bool IncludeTitleHeading { get; init; }
+
+    /// <summary>If true, include the created date in YAML frontmatter.</summary>
+    public bool IncludeCreatedDate { get; init; }
+
+    /// <summary>If true, include the updated date in YAML frontmatter.</summary>
+    public bool IncludeUpdatedDate { get; init; }
+}
+
+/// <summary>
 /// Converts OneNote page XML to Markdown using a recursive visitor pattern.
 /// </summary>
 internal sealed partial class OneNotePageToMarkdownConverter
@@ -38,16 +56,15 @@ internal sealed partial class OneNotePageToMarkdownConverter
     /// <summary>
     /// Converts OneNote page XML to Markdown.
     /// </summary>
-    /// <param name="pageXml">The OneNote page XML content.</param>
-    /// <param name="includeTitleProperty">If true, write the title as a YAML frontmatter property.</param>
-    /// <param name="includeTitleHeading">If true, render the title as a # heading and offset content headings by +1.</param>
-    public string Convert(string pageXml, bool includeTitleProperty = false, bool includeTitleHeading = false)
+    public string Convert(string pageXml, MarkdownConversionSettings? settings = null)
     {
+        settings ??= new MarkdownConversionSettings();
+
         _output.Clear();
         _quickStyles.Clear();
         _tagDefs.Clear();
-        _includeTitleHeading = includeTitleHeading;
-        _offsetHeadings = includeTitleHeading;
+        _includeTitleHeading = settings.IncludeTitleHeading;
+        _offsetHeadings = settings.IncludeTitleHeading;
 
         var doc = XDocument.Parse(pageXml);
         var page = doc.Root;
@@ -58,9 +75,28 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
         var body = _output.ToString().TrimEnd() + "\n";
 
-        if (includeTitleProperty && !string.IsNullOrWhiteSpace(title))
+        var frontmatterProps = new List<string>();
+
+        if (settings.IncludeTitleProperty && !string.IsNullOrWhiteSpace(title))
+            frontmatterProps.Add($"title: \"{EscapeYamlString(title!)}\"");
+
+        if (settings.IncludeCreatedDate)
         {
-            var frontmatter = $"---\ntitle: \"{EscapeYamlString(title!)}\"\n---\n";
+            var created = page.Attribute("dateTime")?.Value;
+            if (created is not null && DateTimeOffset.TryParse(created, out var createdDate))
+                frontmatterProps.Add($"created: {createdDate.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss}");
+        }
+
+        if (settings.IncludeUpdatedDate)
+        {
+            var updated = page.Attribute("lastModifiedTime")?.Value;
+            if (updated is not null && DateTimeOffset.TryParse(updated, out var updatedDate))
+                frontmatterProps.Add($"updated: {updatedDate.UtcDateTime:yyyy-MM-dd'T'HH:mm:ss}");
+        }
+
+        if (frontmatterProps.Count > 0)
+        {
+            var frontmatter = $"---\n{string.Join('\n', frontmatterProps)}\n---\n";
             return frontmatter + body;
         }
 

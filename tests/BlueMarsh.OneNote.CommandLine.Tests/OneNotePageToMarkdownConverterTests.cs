@@ -28,7 +28,7 @@ public class OneNotePageToMarkdownConverterTests
     {
         var warnings = new List<string>();
         var converter = new OneNotePageToMarkdownConverter(w => warnings.Add(w));
-        return converter.Convert(pageXml, includeTitleHeading: true);
+        return converter.Convert(pageXml, new MarkdownConversionSettings { IncludeTitleHeading = true });
     }
 
     [Test]
@@ -269,7 +269,7 @@ public class OneNotePageToMarkdownConverterTests
             """);
 
         var converter = new OneNotePageToMarkdownConverter(w => { });
-        return Verify(converter.Convert(xml, includeTitleProperty: true));
+        return Verify(converter.Convert(xml, new MarkdownConversionSettings { IncludeTitleProperty = true }));
     }
 
     [Test]
@@ -294,7 +294,7 @@ public class OneNotePageToMarkdownConverterTests
             """;
 
         var converter = new OneNotePageToMarkdownConverter(w => { });
-        return Verify(converter.Convert(pageXml, includeTitleProperty: true));
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeTitleProperty = true }));
     }
 
     [Test]
@@ -311,6 +311,86 @@ public class OneNotePageToMarkdownConverterTests
             styles: """<one:QuickStyleDef index="1" name="h1" />""");
 
         var converter = new OneNotePageToMarkdownConverter(w => { });
-        return Verify(converter.Convert(xml, includeTitleProperty: true, includeTitleHeading: true));
+        return Verify(converter.Convert(xml, new MarkdownConversionSettings { IncludeTitleProperty = true, IncludeTitleHeading = true }));
+    }
+
+    [Test]
+    public Task CreatedDate()
+    {
+        var pageXml = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <one:Page xmlns:one="{OneNoteNs}" dateTime="2025-03-15T09:30:00.000Z" lastModifiedTime="2025-04-20T14:45:00.000Z">
+              <one:Title>
+                <one:OE>
+                  <one:T><![CDATA[Test Page]]></one:T>
+                </one:OE>
+              </one:Title>
+              <one:Outline>
+                <one:OEChildren>
+                  <one:OE>
+                    <one:T><![CDATA[Body text.]]></one:T>
+                  </one:OE>
+                </one:OEChildren>
+              </one:Outline>
+            </one:Page>
+            """;
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeCreatedDate = true }));
+    }
+
+    [Test]
+    public Task UpdatedDate()
+    {
+        var pageXml = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <one:Page xmlns:one="{OneNoteNs}" dateTime="2025-03-15T09:30:00.000Z" lastModifiedTime="2025-04-20T14:45:00.000Z">
+              <one:Title>
+                <one:OE>
+                  <one:T><![CDATA[Test Page]]></one:T>
+                </one:OE>
+              </one:Title>
+              <one:Outline>
+                <one:OEChildren>
+                  <one:OE>
+                    <one:T><![CDATA[Body text.]]></one:T>
+                  </one:OE>
+                </one:OEChildren>
+              </one:Outline>
+            </one:Page>
+            """;
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings { IncludeUpdatedDate = true }));
+    }
+
+    [Test]
+    public Task BothDatesWithTitle()
+    {
+        var pageXml = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <one:Page xmlns:one="{OneNoteNs}" dateTime="2025-03-15T09:30:00.000Z" lastModifiedTime="2025-04-20T14:45:00.000Z">
+              <one:Title>
+                <one:OE>
+                  <one:T><![CDATA[Test Page]]></one:T>
+                </one:OE>
+              </one:Title>
+              <one:Outline>
+                <one:OEChildren>
+                  <one:OE>
+                    <one:T><![CDATA[Body text.]]></one:T>
+                  </one:OE>
+                </one:OEChildren>
+              </one:Outline>
+            </one:Page>
+            """;
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(pageXml, new MarkdownConversionSettings
+        {
+            IncludeTitleProperty = true,
+            IncludeCreatedDate = true,
+            IncludeUpdatedDate = true,
+        }));
     }
 }
