@@ -6,6 +6,31 @@ using BlueMarsh.OneNote.CommandLine.OneNote;
 
 namespace BlueMarsh.OneNote.CommandLine.Commands;
 
+/// <summary>
+/// Controls how the page title is represented in the exported Markdown.
+/// </summary>
+internal enum TitleMode
+{
+    /// <summary>
+    /// Write the title as a YAML frontmatter property only if the filename
+    /// does not match the title (e.g. when invalid filename characters were sanitized).
+    /// Content headings are not offset.
+    /// </summary>
+    Auto,
+
+    /// <summary>
+    /// Always write the title as a YAML frontmatter property.
+    /// Content headings are not offset.
+    /// </summary>
+    Property,
+
+    /// <summary>
+    /// Render the title as a Markdown # heading.
+    /// Content headings are offset by +1 level.
+    /// </summary>
+    Heading,
+}
+
 internal static class PageExportCommand
 {
     public static Command Create()
@@ -28,6 +53,11 @@ internal static class PageExportCommand
         {
             Description = "Export raw OneNote XML instead of Markdown",
         };
+        var titleOption = new Option<TitleMode>("--title", "-t")
+        {
+            Description = "How to handle the page title: auto (default), property, or heading",
+            DefaultValueFactory = _ => TitleMode.Auto,
+        };
 
         var command = new Command("export", "Export pages to Markdown or XML files")
         {
@@ -35,6 +65,7 @@ internal static class PageExportCommand
             currentOption,
             outputDirOption,
             rawOption,
+            titleOption,
         };
 
         command.SetAction(parseResult =>
@@ -44,6 +75,7 @@ internal static class PageExportCommand
             var outputDir = parseResult.GetValue(outputDirOption)
                 ?? new DirectoryInfo(Directory.GetCurrentDirectory());
             var raw = parseResult.GetValue(rawOption);
+            var titleMode = parseResult.GetValue(titleOption);
 
             if (current && refString is not null)
             {
@@ -80,7 +112,7 @@ internal static class PageExportCommand
 
                 foreach (var page in pages)
                 {
-                    ExportPage(oneNote, converter, page.Id, page.Name, outputDir);
+                    ExportPage(oneNote, converter, titleMode, page.Id, page.Name, outputDir);
                 }
 
                 return;
@@ -96,16 +128,16 @@ internal static class PageExportCommand
             switch (resolved.NodeType)
             {
                 case HierarchyNodeType.Page:
-                    ExportSinglePage(oneNote, converter, resolved, outputDir);
+                    ExportSinglePage(oneNote, converter, titleMode, resolved, outputDir);
                     break;
 
                 case HierarchyNodeType.Section:
-                    ExportSection(oneNote, converter, resolved.Id, resolved.Name, outputDir);
+                    ExportSection(oneNote, converter, titleMode, resolved.Id, resolved.Name, outputDir);
                     break;
 
                 case HierarchyNodeType.SectionGroup:
                 case HierarchyNodeType.Notebook:
-                    ExportContainer(oneNote, converter, resolved, outputDir);
+                    ExportContainer(oneNote, converter, titleMode, resolved, outputDir);
                     break;
             }
         });
@@ -116,17 +148,27 @@ internal static class PageExportCommand
     private static void ExportPage(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
+        TitleMode titleMode,
         string pageId,
         string pageName,
         DirectoryInfo outputDir)
     {
         var pageXml = oneNote.GetPageContent(pageId);
+        var sanitizedName = SanitizeFileName(pageName);
 
         string content;
         string extension;
         if (converter is not null)
         {
-            content = converter.Convert(pageXml);
+            var includeTitleProperty = titleMode switch
+            {
+                TitleMode.Property => true,
+                TitleMode.Auto => sanitizedName != pageName,
+                _ => false,
+            };
+            var includeTitleHeading = titleMode == TitleMode.Heading;
+
+            content = converter.Convert(pageXml, includeTitleProperty, includeTitleHeading);
             extension = ".md";
         }
         else
@@ -135,7 +177,7 @@ internal static class PageExportCommand
             extension = ".xml";
         }
 
-        var filePath = Path.Combine(outputDir.FullName, SanitizeFileName(pageName) + extension);
+        var filePath = Path.Combine(outputDir.FullName, sanitizedName + extension);
         File.WriteAllText(filePath, content, Encoding.UTF8);
         Console.WriteLine(filePath);
     }
@@ -143,15 +185,17 @@ internal static class PageExportCommand
     private static void ExportSinglePage(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
+        TitleMode titleMode,
         ResolvedRef pageRef,
         DirectoryInfo outputDir)
     {
-        ExportPage(oneNote, converter, pageRef.Id, pageRef.Name, outputDir);
+        ExportPage(oneNote, converter, titleMode, pageRef.Id, pageRef.Name, outputDir);
     }
 
     private static void ExportSection(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
+        TitleMode titleMode,
         string sectionId,
         string sectionName,
         DirectoryInfo outputDir)
@@ -161,13 +205,14 @@ internal static class PageExportCommand
 
         foreach (var page in pages)
         {
-            ExportPage(oneNote, converter, page.Id, page.Name, sectionDir);
+            ExportPage(oneNote, converter, titleMode, page.Id, page.Name, sectionDir);
         }
     }
 
     private static void ExportContainer(
         OneNoteApplication oneNote,
         OneNotePageToMarkdownConverter? converter,
+        TitleMode titleMode,
         ResolvedRef container,
         DirectoryInfo outputDir)
     {
@@ -187,7 +232,7 @@ internal static class PageExportCommand
             var pages = oneNote.GetPages(section.Id);
             foreach (var page in pages)
             {
-                ExportPage(oneNote, converter, page.Id, page.Name, sectionDir);
+                ExportPage(oneNote, converter, titleMode, page.Id, page.Name, sectionDir);
             }
         }
     }

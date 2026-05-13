@@ -16,6 +16,8 @@ internal sealed partial class OneNotePageToMarkdownConverter
     private readonly Dictionary<int, QuickStyleInfo> _quickStyles = [];
     private readonly Dictionary<int, TagDefInfo> _tagDefs = [];
     private readonly Action<string> _warn;
+    private bool _includeTitleHeading;
+    private bool _offsetHeadings;
 
     // Known elements that we handle or intentionally skip
     private static readonly HashSet<string> HandledElements =
@@ -33,23 +35,44 @@ internal sealed partial class OneNotePageToMarkdownConverter
         _warn = warn;
     }
 
-    public string Convert(string pageXml)
+    /// <summary>
+    /// Converts OneNote page XML to Markdown.
+    /// </summary>
+    /// <param name="pageXml">The OneNote page XML content.</param>
+    /// <param name="includeTitleProperty">If true, write the title as a YAML frontmatter property.</param>
+    /// <param name="includeTitleHeading">If true, render the title as a # heading and offset content headings by +1.</param>
+    public string Convert(string pageXml, bool includeTitleProperty = false, bool includeTitleHeading = false)
     {
         _output.Clear();
         _quickStyles.Clear();
         _tagDefs.Clear();
+        _includeTitleHeading = includeTitleHeading;
+        _offsetHeadings = includeTitleHeading;
 
         var doc = XDocument.Parse(pageXml);
         var page = doc.Root;
         if (page is null)
             return "";
 
-        VisitPage(page);
+        var title = VisitPage(page);
 
-        return _output.ToString().TrimEnd() + "\n";
+        var body = _output.ToString().TrimEnd() + "\n";
+
+        if (includeTitleProperty && !string.IsNullOrWhiteSpace(title))
+        {
+            var frontmatter = $"---\ntitle: \"{EscapeYamlString(title!)}\"\n---\n";
+            return frontmatter + body;
+        }
+
+        return body;
     }
 
-    private void VisitPage(XElement page)
+    private static string EscapeYamlString(string value)
+    {
+        return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
+    }
+
+    private string? VisitPage(XElement page)
     {
         // Collect style and tag definitions
         foreach (var styleDef in page.Elements(OneNoteNs + "QuickStyleDef"))
@@ -68,11 +91,12 @@ internal sealed partial class OneNotePageToMarkdownConverter
         }
 
         // Title
+        string? titleText = null;
         var title = page.Element(OneNoteNs + "Title");
         if (title is not null)
         {
-            var titleText = ExtractTextFromOE(title.Element(OneNoteNs + "OE"));
-            if (!string.IsNullOrWhiteSpace(titleText))
+            titleText = ExtractTextFromOE(title.Element(OneNoteNs + "OE"));
+            if (_includeTitleHeading && !string.IsNullOrWhiteSpace(titleText))
             {
                 _output.AppendLine($"# {titleText}");
                 _output.AppendLine();
@@ -94,6 +118,8 @@ internal sealed partial class OneNotePageToMarkdownConverter
                 _warn($"Unhandled page-level element: <{localName}>");
             }
         }
+
+        return string.IsNullOrWhiteSpace(titleText) ? null : titleText;
     }
 
     private void VisitOutline(XElement outline)
@@ -235,8 +261,8 @@ internal sealed partial class OneNotePageToMarkdownConverter
         // Build the line
         if (headingLevel > 0 && !string.IsNullOrWhiteSpace(text))
         {
-            // Add heading - title is h1 so content headings get +1
-            var hashes = new string('#', headingLevel + 1);
+            var effectiveLevel = _offsetHeadings ? headingLevel + 1 : headingLevel;
+            var hashes = new string('#', effectiveLevel);
             _output.AppendLine();
             _output.AppendLine($"{hashes} {text}");
             _output.AppendLine();

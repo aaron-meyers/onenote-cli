@@ -28,7 +28,7 @@ public class OneNotePageToMarkdownConverterTests
     {
         var warnings = new List<string>();
         var converter = new OneNotePageToMarkdownConverter(w => warnings.Add(w));
-        return converter.Convert(pageXml);
+        return converter.Convert(pageXml, includeTitleHeading: true);
     }
 
     [Test]
@@ -240,5 +240,77 @@ public class OneNotePageToMarkdownConverterTests
             """);
 
         return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task NoTitleHeading()
+    {
+        var xml = WrapPage("""
+            <one:OE quickStyleIndex="1">
+              <one:T><![CDATA[Heading 1]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Body text.]]></one:T>
+            </one:OE>
+            """,
+            styles: """<one:QuickStyleDef index="1" name="h1" />""");
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(xml));
+    }
+
+    [Test]
+    public Task TitleProperty()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Body text.]]></one:T>
+            </one:OE>
+            """);
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(xml, includeTitleProperty: true));
+    }
+
+    [Test]
+    public Task TitlePropertyWithSpecialCharacters()
+    {
+        var pageXml = $"""
+            <?xml version="1.0" encoding="utf-8"?>
+            <one:Page xmlns:one="{OneNoteNs}">
+              <one:Title>
+                <one:OE>
+                  <one:T><![CDATA[Notes: "Project A/B"]]></one:T>
+                </one:OE>
+              </one:Title>
+              <one:Outline>
+                <one:OEChildren>
+                  <one:OE>
+                    <one:T><![CDATA[Content here.]]></one:T>
+                  </one:OE>
+                </one:OEChildren>
+              </one:Outline>
+            </one:Page>
+            """;
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(pageXml, includeTitleProperty: true));
+    }
+
+    [Test]
+    public Task TitlePropertyAndHeading()
+    {
+        var xml = WrapPage("""
+            <one:OE quickStyleIndex="1">
+              <one:T><![CDATA[Section]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Body text.]]></one:T>
+            </one:OE>
+            """,
+            styles: """<one:QuickStyleDef index="1" name="h1" />""");
+
+        var converter = new OneNotePageToMarkdownConverter(w => { });
+        return Verify(converter.Convert(xml, includeTitleProperty: true, includeTitleHeading: true));
     }
 }
