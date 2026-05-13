@@ -19,6 +19,11 @@ internal enum TitleMode
     Auto,
 
     /// <summary>
+    /// Do not include the title in the output at all.
+    /// </summary>
+    None,
+
+    /// <summary>
     /// Always write the title as a YAML frontmatter property.
     /// Content headings are not offset.
     /// </summary>
