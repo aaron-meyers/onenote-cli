@@ -1,6 +1,6 @@
 # onenote-cli
 
-A command-line interface for Microsoft OneNote on Windows. Exports notebooks, sections, and pages to Markdown or XML by communicating with the desktop OneNote application via COM interop.
+A command-line interface for Microsoft OneNote on Windows. Exports notebooks, sections, and pages to Markdown or [MS-ONE](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-one/73d22548-a613-4350-8c23-07d15576be50) XML by communicating with the desktop OneNote application via [COM interop](https://learn.microsoft.com/en-us/office/client-developer/onenote/application-interface-onenote).
 
 ## Requirements
 
@@ -60,6 +60,9 @@ dotnet test --filter "PlainText"
 ```
 
 Tests use [TUnit](https://github.com/thomhurst/TUnit) with [Verify](https://github.com/VerifyTests/Verify) for snapshot testing. Expected outputs are stored as `*.verified.txt` files alongside the test class.
+
+## Related projects
+- [onenote-cli](https://github.com/snomiao/onenote-cli) - Node.js CLI based on Microsoft Graph API for OneNote Online which similarly provides export of OneNote content to markdown. The Graph endpoints work with "OneNote-flavored HTML" rather than the [MS-ONE](https://learn.microsoft.com/en-us/openspecs/office_file_formats/ms-one/73d22548-a613-4350-8c23-07d15576be50) XML format exposed by the Windows COM interface. My primary motivation for building a new project based on the COM interface is that I cannot access my enterprise notebooks via Microsoft Graph due to corporate IT restrictions.
 
 ## License
 
