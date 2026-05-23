@@ -365,6 +365,21 @@ public class OneNotePageToMarkdownConverterTests
     }
 
     [Test]
+    public Task HtmlEntityDecoding()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Strings &amp; things &quot;quoted&quot; with &lt;angle brackets&gt; and &#39;apostrophes&#39;]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[<a href="https://example.com?foo=1&amp;bar=2">link &amp; text</a>]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
     public Task BothDatesWithTitle()
     {
         var pageXml = $"""

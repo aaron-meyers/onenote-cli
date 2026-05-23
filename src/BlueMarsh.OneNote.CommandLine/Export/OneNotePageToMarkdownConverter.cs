@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -420,7 +421,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
     private static string ConvertInlineHtml(string html)
     {
         if (!html.Contains('<'))
-            return html;
+            return WebUtility.HtmlDecode(html);
 
         var result = new StringBuilder();
         var pos = 0;
@@ -430,13 +431,13 @@ internal sealed partial class OneNotePageToMarkdownConverter
             var tagStart = html.IndexOf('<', pos);
             if (tagStart < 0)
             {
-                result.Append(html, pos, html.Length - pos);
+                result.Append(WebUtility.HtmlDecode(html[pos..]));
                 break;
             }
 
             // Append text before the tag
             if (tagStart > pos)
-                result.Append(html, pos, tagStart - pos);
+                result.Append(WebUtility.HtmlDecode(html[pos..tagStart]));
 
             var tagEnd = html.IndexOf('>', tagStart);
             if (tagEnd < 0)
@@ -479,7 +480,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
                 if (anchorEnd >= 0)
                 {
                     var linkText = ConvertInlineHtml(html[(tagEnd + 1)..anchorEnd]);
-                    var hrefStr = href.ToString();
+                    var hrefStr = WebUtility.HtmlDecode(href.ToString());
                     if (!string.IsNullOrEmpty(hrefStr))
                         result.Append($"[{linkText}]({hrefStr})");
                     else
