@@ -1,7 +1,7 @@
-using System.Net;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using ReverseMarkdown;
 
 namespace BlueMarsh.OneNote.CommandLine.Export;
 
@@ -418,144 +418,102 @@ internal sealed partial class OneNotePageToMarkdownConverter
         return string.Join("", parts).Trim();
     }
 
+    private static readonly Converter ReverseMarkdownConverter = new(new Config
+    {
+        UnknownTags = Config.UnknownTagsOption.Bypass,
+        GithubFlavored = true,
+        SmartHrefHandling = false,
+    });
+
     private static string ConvertInlineHtml(string html)
     {
         if (!html.Contains('<'))
-            return WebUtility.HtmlDecode(html);
+            return System.Net.WebUtility.HtmlDecode(html);
 
-        var result = new StringBuilder();
-        var pos = 0;
+        // First convert formatting spans (bold, italic, strikethrough) to semantic tags.
+        // This eliminates nested <span> tags that would confuse highlight extraction.
+        var normalized = NormalizeSpanStyles(html);
 
-        while (pos < html.Length)
+        // Handle highlight spans — now safe because inner spans are already semantic tags.
+        // Recursively convert inner content, then wrap with == markers.
+        normalized = HighlightSpanRegex().Replace(normalized, match =>
         {
-            var tagStart = html.IndexOf('<', pos);
-            if (tagStart < 0)
+            var inner = ConvertInlineHtml(match.Groups[1].Value);
+            return $"=={inner}==";
+        });
+
+        if (!normalized.Contains('<'))
+            return normalized;
+
+        var markdown = ReverseMarkdownConverter.Convert(normalized);
+
+        // ReverseMarkdown preserves HTML entities in href values; decode them.
+        markdown = MarkdownLinkHrefRegex().Replace(markdown, match =>
+        {
+            var text = match.Groups[1].Value;
+            var href = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value);
+            return $"[{text}]({href})";
+        });
+
+        // ReverseMarkdown may add trailing newlines; trim for inline use
+        return markdown.TrimEnd('\r', '\n');
+    }
+
+    [GeneratedRegex(
+        @"<span\s[^>]*style\s*=\s*""([^""]*)""[^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex SpanStyleRegex();
+
+    [GeneratedRegex(
+        @"<span\s[^>]*style\s*=\s*""[^""]*(?:background-color|background:)[^""]*""[^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex HighlightSpanRegex();
+
+    [GeneratedRegex(@"\[([^\]]*)\]\(([^)]*)\)")]
+    private static partial Regex MarkdownLinkHrefRegex();
+
+    private static string NormalizeSpanStyles(string html)
+    {
+        // Repeatedly replace styled spans with semantic HTML tags until none remain
+        string previous;
+        var result = html;
+        do
+        {
+            previous = result;
+            result = SpanStyleRegex().Replace(previous, match =>
             {
-                result.Append(WebUtility.HtmlDecode(html[pos..]));
-                break;
-            }
+                var style = match.Groups[1].Value.ToLowerInvariant();
+                var inner = match.Groups[2].Value;
 
-            // Append text before the tag
-            if (tagStart > pos)
-                result.Append(WebUtility.HtmlDecode(html[pos..tagStart]));
+                var open = new StringBuilder();
+                var close = new StringBuilder();
 
-            var tagEnd = html.IndexOf('>', tagStart);
-            if (tagEnd < 0)
-            {
-                result.Append(html, pos, html.Length - pos);
-                break;
-            }
-
-            var tag = html.AsSpan(tagStart, tagEnd - tagStart + 1);
-
-            if (StartsWithTag(tag, "span"))
-            {
-                var style = ExtractAttribute(tag, "style");
-                var (mdOpen, mdClose) = ParseStyleToMarkdown(style);
-                var spanEnd = html.IndexOf("</span>", tagEnd, StringComparison.OrdinalIgnoreCase);
-                if (spanEnd >= 0)
+                if (style.Contains("font-weight:bold") || style.Contains("font-weight: bold"))
                 {
-                    var innerHtml = html[(tagEnd + 1)..spanEnd];
-                    var innerText = ConvertInlineHtml(innerHtml);
-                    if (!string.IsNullOrWhiteSpace(innerText))
-                    {
-                        result.Append(mdOpen);
-                        result.Append(innerText);
-                        result.Append(mdClose);
-                    }
-                    pos = spanEnd + "</span>".Length;
-                    continue;
+                    open.Append("<strong>");
+                    close.Insert(0, "</strong>");
                 }
-            }
-            else if (StartsWithTag(tag, "br"))
-            {
-                result.Append("  \n");
-                pos = tagEnd + 1;
-                continue;
-            }
-            else if (StartsWithTag(tag, "a"))
-            {
-                var href = ExtractAttribute(tag, "href");
-                var anchorEnd = html.IndexOf("</a>", tagEnd, StringComparison.OrdinalIgnoreCase);
-                if (anchorEnd >= 0)
+
+                if (style.Contains("font-style:italic") || style.Contains("font-style: italic"))
                 {
-                    var linkText = ConvertInlineHtml(html[(tagEnd + 1)..anchorEnd]);
-                    var hrefStr = WebUtility.HtmlDecode(href.ToString());
-                    if (!string.IsNullOrEmpty(hrefStr))
-                        result.Append($"[{linkText}]({hrefStr})");
-                    else
-                        result.Append(linkText);
-                    pos = anchorEnd + "</a>".Length;
-                    continue;
+                    open.Append("<em>");
+                    close.Insert(0, "</em>");
                 }
-            }
 
-            // Skip unrecognized tags
-            pos = tagEnd + 1;
-        }
+                if (style.Contains("text-decoration:line-through") || style.Contains("text-decoration: line-through"))
+                {
+                    open.Append("<del>");
+                    close.Insert(0, "</del>");
+                }
 
-        return result.ToString();
-    }
+                if (open.Length == 0)
+                    return match.Value; // unrecognized or highlight style — keep as-is
 
-    private static bool StartsWithTag(ReadOnlySpan<char> tag, string tagName)
-    {
-        if (!tag.StartsWith($"<{tagName}".AsSpan(), StringComparison.OrdinalIgnoreCase))
-            return false;
-        var nextCharIndex = 1 + tagName.Length;
-        return nextCharIndex >= tag.Length || !char.IsLetter(tag[nextCharIndex]);
-    }
+                return $"{open}{inner}{close}";
+            });
+        } while (result != previous);
 
-    private static ReadOnlySpan<char> ExtractAttribute(ReadOnlySpan<char> tag, string attrName)
-    {
-        var search = $"{attrName}=".AsSpan();
-        var idx = tag.IndexOf(search, StringComparison.OrdinalIgnoreCase);
-        if (idx < 0)
-            return [];
-
-        idx += search.Length;
-        if (idx >= tag.Length)
-            return [];
-
-        var quote = tag[idx];
-        if (quote is '\'' or '"')
-        {
-            idx++;
-            var end = tag[idx..].IndexOf(quote);
-            if (end >= 0)
-                return tag.Slice(idx, end);
-        }
-
-        return [];
-    }
-
-    private static (string open, string close) ParseStyleToMarkdown(ReadOnlySpan<char> style)
-    {
-        if (style.IsEmpty)
-            return ("", "");
-
-        var styleStr = style.ToString().ToLowerInvariant();
-        var open = new StringBuilder();
-        var close = new StringBuilder();
-
-        if (styleStr.Contains("font-weight:bold") || styleStr.Contains("font-weight: bold"))
-        {
-            open.Append("**");
-            close.Insert(0, "**");
-        }
-
-        if (styleStr.Contains("font-style:italic") || styleStr.Contains("font-style: italic"))
-        {
-            open.Append('*');
-            close.Insert(0, '*');
-        }
-
-        if (styleStr.Contains("text-decoration:line-through") || styleStr.Contains("text-decoration: line-through"))
-        {
-            open.Append("~~");
-            close.Insert(0, "~~");
-        }
-
-        return (open.ToString(), close.ToString());
+        return result;
     }
 
     private static bool IsToDoTag(TagDefInfo tagDef)

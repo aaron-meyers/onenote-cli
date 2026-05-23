@@ -409,4 +409,82 @@ public class OneNotePageToMarkdownConverterTests
             UtcDates = true,
         }));
     }
+
+    [Test]
+    public Task BoldItalicTags()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Normal <b>bold</b> and <i>italic</i> normal]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task StrikethroughTag()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Normal <s>struck</s> and <strike>also struck</strike> normal]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task Highlight()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Normal <span style="background-color:yellow">highlighted</span> normal]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task HighlightWithFormatting()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[<span style="background-color:yellow"><span style="font-weight:bold">bold highlight</span></span>]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[<span style="background-color:cyan"><span style="font-style:italic">italic highlight</span></span>]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[<span style="background-color:red"><span style="text-decoration:line-through">struck highlight</span></span>]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task NestedFormatting()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[<b><i>bold italic</i></b> and <span style="font-weight:bold"><span style="font-style:italic">also bold italic</span></span>]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task ColorSpanStripped()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Normal <span style="color:#ff0000">red text</span> normal]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
 }

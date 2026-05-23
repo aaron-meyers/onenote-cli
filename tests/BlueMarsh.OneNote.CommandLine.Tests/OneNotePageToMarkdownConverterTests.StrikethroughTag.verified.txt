@@ -1,0 +1,3 @@
+﻿# Test Page
+
+Normal ~~struck~~ and ~~also struck~~ normal
