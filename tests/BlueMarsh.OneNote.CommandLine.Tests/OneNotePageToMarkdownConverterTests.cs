@@ -246,6 +246,33 @@ public class OneNotePageToMarkdownConverterTests
     }
 
     [Test]
+    public Task TableWithMultilineCells()
+    {
+        // Cells may contain line breaks via <br /> tags, embedded newlines, or multiple
+        // OE elements. All must collapse to a single Markdown line using <br>.
+        var xml = WrapPage("""
+            <one:OE>
+              <one:Table>
+                <one:Row>
+                  <one:Cell><one:OEChildren><one:OE><one:T><![CDATA[Console]]></one:T></one:OE></one:OEChildren></one:Cell>
+                  <one:Cell><one:OEChildren><one:OE><one:T><![CDATA[NES/SNES<br />
+            N64/PS1]]></one:T></one:OE></one:OEChildren></one:Cell>
+                </one:Row>
+                <one:Row>
+                  <one:Cell><one:OEChildren><one:OE><one:T><![CDATA[3DS]]></one:T></one:OE></one:OEChildren></one:Cell>
+                  <one:Cell><one:OEChildren>
+                    <one:OE><one:T><![CDATA[T 4.88"]]></one:T></one:OE>
+                    <one:OE><one:T><![CDATA[B 4.18"]]></one:T></one:OE>
+                  </one:OEChildren></one:Cell>
+                </one:Row>
+              </one:Table>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
     public Task NestedList()
     {
         var xml = WrapPage("""

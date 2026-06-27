@@ -392,7 +392,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
             _output.Append('|');
             foreach (var text in cellTexts)
             {
-                _output.Append($" {text.Replace("|", "\\|")} |");
+                _output.Append($" {FormatTableCell(text)} |");
             }
             _output.AppendLine();
 
@@ -409,6 +409,21 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
         _output.AppendLine();
     }
+
+    // Collapse any run of line breaks (with surrounding spaces/tabs) within a table cell
+    // into a single <br> so the cell stays on one Markdown line, then escape pipes.
+    private static string FormatTableCell(string text)
+    {
+        var collapsed = TableCellNewlineRegex().Replace(text, "<br>").Trim();
+        if (collapsed.StartsWith("<br>", StringComparison.Ordinal))
+            collapsed = collapsed[4..];
+        if (collapsed.EndsWith("<br>", StringComparison.Ordinal))
+            collapsed = collapsed[..^4];
+        return collapsed.Replace("|", "\\|");
+    }
+
+    [GeneratedRegex(@"[ \t]*(?:\r\n|\r|\n)+[ \t]*")]
+    private static partial Regex TableCellNewlineRegex();
 
     private string ExtractTextFromOE(XElement? oe)
     {
@@ -467,7 +482,9 @@ internal sealed partial class OneNotePageToMarkdownConverter
         string result;
         if (!normalized.Contains('<'))
         {
-            result = normalized;
+            // No tags remain (only plain text and/or sup/sub placeholders); still decode
+            // any HTML entities that were part of the surrounding text.
+            result = System.Net.WebUtility.HtmlDecode(normalized);
         }
         else
         {
