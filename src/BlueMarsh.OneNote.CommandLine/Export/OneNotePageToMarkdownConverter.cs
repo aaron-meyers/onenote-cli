@@ -451,22 +451,66 @@ internal sealed partial class OneNotePageToMarkdownConverter
             return $"=={inner}==";
         });
 
-        if (!normalized.Contains('<'))
-            return normalized;
-
-        var markdown = ReverseMarkdownConverter.Convert(normalized);
-
-        // ReverseMarkdown preserves HTML entities in href values; decode them.
-        markdown = MarkdownLinkHrefRegex().Replace(markdown, match =>
+        // Handle superscript/subscript (vertical-align) spans. Convert them to placeholder
+        // tokens so ReverseMarkdown does not strip them, then restore <sup>/<sub> at the end.
+        normalized = SuperscriptSpanRegex().Replace(normalized, match =>
         {
-            var text = match.Groups[1].Value;
-            var href = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value);
-            return $"[{text}]({href})";
+            var inner = ConvertInlineHtml(match.Groups[1].Value);
+            return $"{SupOpenPlaceholder}{inner}{SupClosePlaceholder}";
+        });
+        normalized = SubscriptSpanRegex().Replace(normalized, match =>
+        {
+            var inner = ConvertInlineHtml(match.Groups[1].Value);
+            return $"{SubOpenPlaceholder}{inner}{SubClosePlaceholder}";
         });
 
-        // ReverseMarkdown may add trailing newlines; trim for inline use
-        return markdown.TrimEnd('\r', '\n');
+        string result;
+        if (!normalized.Contains('<'))
+        {
+            result = normalized;
+        }
+        else
+        {
+            var markdown = ReverseMarkdownConverter.Convert(normalized);
+
+            // ReverseMarkdown preserves HTML entities in href values; decode them.
+            markdown = MarkdownLinkHrefRegex().Replace(markdown, match =>
+            {
+                var text = match.Groups[1].Value;
+                var href = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value);
+                return $"[{text}]({href})";
+            });
+
+            // ReverseMarkdown may add trailing newlines; trim for inline use
+            result = markdown.TrimEnd('\r', '\n');
+        }
+
+        return RestoreSupSubPlaceholders(result);
     }
+
+    private const string SupOpenPlaceholder = "\uE000sup\uE000";
+    private const string SupClosePlaceholder = "\uE000/sup\uE000";
+    private const string SubOpenPlaceholder = "\uE001sub\uE001";
+    private const string SubClosePlaceholder = "\uE001/sub\uE001";
+
+    private static string RestoreSupSubPlaceholders(string text)
+    {
+        return text
+            .Replace(SupOpenPlaceholder, "<sup>")
+            .Replace(SupClosePlaceholder, "</sup>")
+            .Replace(SubOpenPlaceholder, "<sub>")
+            .Replace(SubClosePlaceholder, "</sub>");
+    }
+
+    [GeneratedRegex(
+        @"<span\s[^>]*style\s*=\s*['""][^'""]*vertical-align:\s*super[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex SuperscriptSpanRegex();
+
+    [GeneratedRegex(
+        @"<span\s[^>]*style\s*=\s*['""][^'""]*vertical-align:\s*sub[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
+    private static partial Regex SubscriptSpanRegex();
 
     [GeneratedRegex(
         @"<span\s[^>]*style\s*=\s*""([^""]*)""[^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",

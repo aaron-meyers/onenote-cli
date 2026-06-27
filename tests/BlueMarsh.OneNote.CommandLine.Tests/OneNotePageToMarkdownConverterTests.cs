@@ -513,4 +513,23 @@ public class OneNotePageToMarkdownConverterTests
 
         return Verify(Convert(xml));
     }
+
+    [Test]
+    public Task SuperscriptAndSubscript()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[E = mc<span style='vertical-align:super'>2</span>]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[H<span style='vertical-align:sub'>2</span>O]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Footnote<span
+            style='vertical-align:super'>1</span> reference]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
 }
