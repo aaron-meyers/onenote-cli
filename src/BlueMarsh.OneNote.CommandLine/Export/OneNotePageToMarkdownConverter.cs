@@ -440,6 +440,9 @@ internal sealed partial class OneNotePageToMarkdownConverter
     [GeneratedRegex(@"[ \t]*(?:\r\n|\r|\n)+[ \t]*")]
     private static partial Regex TableCellNewlineRegex();
 
+    [GeneratedRegex(@"\s+")]
+    private static partial Regex WhitespaceRegex();
+
     private string ExtractTextFromOE(XElement? oe)
     {
         if (oe is null) return "";
@@ -559,7 +562,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
     // that represent it. Returns an empty list if no formatting is recognized.
     private static List<string> SemanticTagsForStyle(string style)
     {
-        var s = style.Replace(" ", "").ToLowerInvariant();
+        var s = WhitespaceRegex().Replace(style, "").ToLowerInvariant();
         var tags = new List<string>();
 
         if (s.Contains("background-color:") || s.Contains("background:"))

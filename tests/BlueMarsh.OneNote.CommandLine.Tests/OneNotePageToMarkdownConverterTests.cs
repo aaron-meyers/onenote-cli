@@ -561,6 +561,22 @@ public class OneNotePageToMarkdownConverterTests
     }
 
     [Test]
+    public Task SuperscriptWithNewlineInStyleValue()
+    {
+        // OneNote may wrap long style attributes mid-value, putting a newline inside the
+        // CSS declaration (e.g. "vertical-align:\nsuper"). This must still be recognized.
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[3.47" <span
+            style='vertical-align:super'>2</span> and 3.09" <span style='vertical-align:
+            super'>3</span>]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
     public Task SingleQuotedStyleSpans()
     {
         // OneNote sometimes emits style attributes with single quotes; these must still
