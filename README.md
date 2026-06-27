@@ -13,10 +13,11 @@ A command-line interface for Microsoft OneNote on Windows. Exports notebooks, se
 onenote notebook list
 onenote section list <notebook>
 onenote page list <notebook/section>
-onenote page export <ref> [--output-dir <path>] [--raw] [--line-endings LF|CRLF|System]
+onenote page export <ref> [--output-dir <path>] [--raw] ...
 ```
 
 The `<ref>` argument accepts a notebook name, a `/`-separated path (e.g. `MyNotebook/Section/Page`), or a OneNote object ID.
+The `export` command has additional options, `onenote page export --help` for more details.
 
 ### Examples
 
