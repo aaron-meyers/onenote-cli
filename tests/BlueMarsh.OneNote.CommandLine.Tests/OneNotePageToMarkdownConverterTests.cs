@@ -559,4 +559,81 @@ public class OneNotePageToMarkdownConverterTests
 
         return Verify(Convert(xml));
     }
+
+    [Test]
+    public Task SingleQuotedStyleSpans()
+    {
+        // OneNote sometimes emits style attributes with single quotes; these must still
+        // be recognized as bold/italic/strikethrough/highlight.
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Normal <span
+            style='font-weight:bold'>bold</span> normal]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Normal <span style='font-style:italic'>italic</span> normal]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Normal <span style='text-decoration:line-through'>struck</span> normal]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Normal <span style='background-color:yellow'>highlighted</span> normal]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task AngleBracketLink()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[From &lt;<a href="https://example.com/x">https://example.com/x</a>&gt; ]]></one:T>
+            </one:OE>
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task NonTodoTagHashtag()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:Tag index="1" completed="false" />
+              <one:T><![CDATA[A starred paragraph]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:List><one:Bullet bullet="2" /></one:List>
+              <one:Tag index="1" completed="false" />
+              <one:T><![CDATA[A starred list item]]></one:T>
+            </one:OE>
+            """,
+            styles: """
+            <one:TagDef index="1" type="1" symbol="13" name="Important" />
+            """);
+
+        return Verify(Convert(xml));
+    }
+
+    [Test]
+    public Task NonTodoTagHashtagInTableCell()
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:Table>
+                <one:Row>
+                  <one:Cell><one:OEChildren><one:OE><one:Tag index="1" completed="false" /><one:T><![CDATA[ARMS]]></one:T></one:OE></one:OEChildren></one:Cell>
+                  <one:Cell><one:OEChildren><one:OE><one:T><![CDATA[Free]]></one:T></one:OE></one:OEChildren></one:Cell>
+                </one:Row>
+              </one:Table>
+            </one:OE>
+            """,
+            styles: """
+            <one:TagDef index="1" type="1" symbol="13" name="Important" />
+            """);
+
+        return Verify(Convert(xml));
+    }
 }

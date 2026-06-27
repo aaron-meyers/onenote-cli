@@ -1,0 +1,6 @@
+﻿# Test Page
+
+Normal **bold** normal
+Normal *italic* normal
+Normal ~~struck~~ normal
+Normal ==highlighted== normal

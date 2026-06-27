@@ -143,7 +143,8 @@ internal sealed partial class OneNotePageToMarkdownConverter
             var index = int.Parse(tagDef.Attribute("index")?.Value ?? "0");
             var type = tagDef.Attribute("type")?.Value ?? "";
             var symbol = tagDef.Attribute("symbol")?.Value ?? "";
-            _tagDefs[index] = new TagDefInfo(index, type, symbol);
+            var name = tagDef.Attribute("name")?.Value ?? "";
+            _tagDefs[index] = new TagDefInfo(index, type, symbol, name);
         }
 
         // Title
@@ -266,16 +267,25 @@ internal sealed partial class OneNotePageToMarkdownConverter
         var isTodo = false;
         var isListItem = false;
 
-        // Check for tag (To-Do)
+        // Check for tag (To-Do or a named label tag)
         var tag = oe.Element(OneNoteNs + "Tag");
+        var tagSuffix = "";
         if (tag is not null)
         {
             var tagIndex = int.Parse(tag.Attribute("index")?.Value ?? "-1");
             var completed = tag.Attribute("completed")?.Value == "true";
-            if (_tagDefs.TryGetValue(tagIndex, out var tagDef) && IsToDoTag(tagDef))
+            if (_tagDefs.TryGetValue(tagIndex, out var tagDef))
             {
-                isTodo = true;
-                prefix = completed ? "- [x] " : "- [ ] ";
+                if (IsToDoTag(tagDef))
+                {
+                    isTodo = true;
+                    prefix = completed ? "- [x] " : "- [ ] ";
+                }
+                else
+                {
+                    // Non-To-Do tag: append its name as a lowercased hashtag (e.g. #important).
+                    tagSuffix = TagHashtagSuffix(tagDef);
+                }
             }
         }
 
@@ -313,6 +323,10 @@ internal sealed partial class OneNotePageToMarkdownConverter
 
         // Extract text
         var text = ExtractTextFromOE(oe);
+
+        // Append any non-To-Do tag hashtag to the line it appears on.
+        if (tagSuffix.Length > 0)
+            text = (text + tagSuffix).Trim();
 
         // Build the line
         if (headingLevel > 0 && !string.IsNullOrWhiteSpace(text))
@@ -381,7 +395,7 @@ internal sealed partial class OneNotePageToMarkdownConverter
                 var parts = new List<string>();
                 foreach (var oe in oeChildren.Elements(OneNoteNs + "OE"))
                 {
-                    var text = ExtractTextFromOE(oe);
+                    var text = (ExtractTextFromOE(oe) + TagSuffixFor(oe)).Trim();
                     if (!string.IsNullOrEmpty(text))
                         parts.Add(text);
                 }
@@ -490,16 +504,10 @@ internal sealed partial class OneNotePageToMarkdownConverter
         {
             var markdown = ReverseMarkdownConverter.Convert(normalized);
 
-            // ReverseMarkdown preserves HTML entities in href values; decode them.
-            markdown = MarkdownLinkHrefRegex().Replace(markdown, match =>
-            {
-                var text = match.Groups[1].Value;
-                var href = System.Net.WebUtility.HtmlDecode(match.Groups[2].Value);
-                return $"[{text}]({href})";
-            });
-
-            // ReverseMarkdown may add trailing newlines; trim for inline use
-            result = markdown.TrimEnd('\r', '\n');
+            // ReverseMarkdown may add trailing newlines; trim for inline use.
+            // Decode any HTML entities it preserved (e.g. &lt; &gt; around autolinks,
+            // and entities inside href values).
+            result = System.Net.WebUtility.HtmlDecode(markdown.TrimEnd('\r', '\n'));
         }
 
         return RestoreSupSubPlaceholders(result);
@@ -530,17 +538,14 @@ internal sealed partial class OneNotePageToMarkdownConverter
     private static partial Regex SubscriptSpanRegex();
 
     [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*""([^""]*)""[^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        @"<span\s[^>]*style\s*=\s*['""]([^'""]*)['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex SpanStyleRegex();
 
     [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*""[^""]*(?:background-color|background:)[^""]*""[^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
+        @"<span\s[^>]*style\s*=\s*['""][^'""]*(?:background-color|background:)[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
         RegexOptions.IgnoreCase | RegexOptions.Singleline)]
     private static partial Regex HighlightSpanRegex();
-
-    [GeneratedRegex(@"\[([^\]]*)\]\(([^)]*)\)")]
-    private static partial Regex MarkdownLinkHrefRegex();
 
     private static string NormalizeSpanStyles(string html)
     {
@@ -593,6 +598,38 @@ internal sealed partial class OneNotePageToMarkdownConverter
         return tagDef.Type == "0";
     }
 
+    // Converts a tag name to a lowercased hashtag (e.g. "Important" -> "#important",
+    // "To Do" -> "#todo"). Returns null if no usable characters remain.
+    private static string? ToHashtag(string tagName)
+    {
+        var sb = new StringBuilder();
+        foreach (var c in tagName)
+        {
+            if (char.IsLetterOrDigit(c))
+                sb.Append(char.ToLowerInvariant(c));
+        }
+        return sb.Length == 0 ? null : "#" + sb;
+    }
+
+    // Returns " #hashtag" for a non-To-Do tag definition, or "" if not applicable.
+    private static string TagHashtagSuffix(TagDefInfo tagDef)
+    {
+        if (IsToDoTag(tagDef))
+            return "";
+        var hashtag = ToHashtag(tagDef.Name);
+        return hashtag is null ? "" : $" {hashtag}";
+    }
+
+    // Resolves the non-To-Do tag (if any) on an OE element to its " #hashtag" suffix.
+    private string TagSuffixFor(XElement oe)
+    {
+        var tag = oe.Element(OneNoteNs + "Tag");
+        if (tag is null)
+            return "";
+        var tagIndex = int.Parse(tag.Attribute("index")?.Value ?? "-1");
+        return _tagDefs.TryGetValue(tagIndex, out var tagDef) ? TagHashtagSuffix(tagDef) : "";
+    }
+
     private sealed record QuickStyleInfo(int Index, string Name);
-    private sealed record TagDefInfo(int Index, string Type, string Symbol);
+    private sealed record TagDefInfo(int Index, string Type, string Symbol, string Name);
 }
