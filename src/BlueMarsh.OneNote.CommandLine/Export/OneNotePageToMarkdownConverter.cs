@@ -24,6 +24,9 @@ internal sealed record MarkdownConversionSettings
 
     /// <summary>If true, write dates in UTC with a 'Z' suffix; otherwise use local timezone.</summary>
     public bool UtcDates { get; init; }
+
+    /// <summary>The line ending used in the output. Defaults to LF ("\n").</summary>
+    public string NewLine { get; init; } = "\n";
 }
 
 /// <summary>
@@ -101,10 +104,16 @@ internal sealed partial class OneNotePageToMarkdownConverter
         if (frontmatterProps.Count > 0)
         {
             var frontmatter = $"---\n{string.Join('\n', frontmatterProps)}\n---\n";
-            return frontmatter + body;
+            return NormalizeLineEndings(frontmatter + body, settings.NewLine);
         }
 
-        return body;
+        return NormalizeLineEndings(body, settings.NewLine);
+    }
+
+    private static string NormalizeLineEndings(string text, string newLine)
+    {
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        return newLine == "\n" ? normalized : normalized.Replace("\n", newLine);
     }
 
     private static string EscapeYamlString(string value)

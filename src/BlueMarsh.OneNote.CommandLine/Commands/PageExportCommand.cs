@@ -47,6 +47,21 @@ internal enum DatesMode
     None,
 }
 
+/// <summary>
+/// Controls the line ending used in exported Markdown.
+/// </summary>
+internal enum LineEndingMode
+{
+    /// <summary>Unix line endings ("\n").</summary>
+    LF,
+
+    /// <summary>Windows line endings ("\r\n").</summary>
+    CRLF,
+
+    /// <summary>The current environment's line ending (<see cref="Environment.NewLine"/>).</summary>
+    System,
+}
+
 internal static class PageExportCommand
 {
     public static Command Create()
@@ -83,6 +98,11 @@ internal static class PageExportCommand
         {
             Description = "Write dates in UTC with 'Z' suffix instead of local timezone",
         };
+        var lineEndingsOption = new Option<LineEndingMode>("--line-endings")
+        {
+            Description = "Line endings for output: lf (default), crlf, or system",
+            DefaultValueFactory = _ => LineEndingMode.LF,
+        };
 
         var command = new Command("export", "Export pages to Markdown or XML files")
         {
@@ -93,6 +113,7 @@ internal static class PageExportCommand
             titleOption,
             datesOption,
             utcOption,
+            lineEndingsOption,
         };
 
         command.SetAction(parseResult =>
@@ -105,6 +126,7 @@ internal static class PageExportCommand
             var titleMode = parseResult.GetValue(titleOption);
             var datesMode = parseResult.GetValue(datesOption);
             var utcDates = parseResult.GetValue(utcOption);
+            var lineEndingMode = parseResult.GetValue(lineEndingsOption);
 
             if (current && refString is not null)
             {
@@ -130,7 +152,7 @@ internal static class PageExportCommand
                     warn: msg => Console.Error.WriteLine($"Warning: {msg}"));
             }
 
-            var exportOptions = new ExportOptions(titleMode, datesMode, utcDates);
+            var exportOptions = new ExportOptions(titleMode, datesMode, utcDates, lineEndingMode);
 
             if (current)
             {
@@ -176,7 +198,20 @@ internal static class PageExportCommand
         return command;
     }
 
-    private sealed record ExportOptions(TitleMode TitleMode, DatesMode DatesMode, bool UtcDates);
+    private sealed record ExportOptions(TitleMode TitleMode, DatesMode DatesMode, bool UtcDates, LineEndingMode LineEndingMode);
+
+    private static string ResolveNewLine(LineEndingMode mode) => mode switch
+    {
+        LineEndingMode.CRLF => "\r\n",
+        LineEndingMode.System => Environment.NewLine,
+        _ => "\n",
+    };
+
+    private static string NormalizeLineEndings(string text, string newLine)
+    {
+        var normalized = text.Replace("\r\n", "\n").Replace("\r", "\n");
+        return newLine == "\n" ? normalized : normalized.Replace("\n", newLine);
+    }
 
     private static void ExportPage(
         OneNoteApplication oneNote,
@@ -191,6 +226,7 @@ internal static class PageExportCommand
 
         string content;
         string extension;
+        var newLine = ResolveNewLine(options.LineEndingMode);
         if (converter is not null)
         {
             var settings = new MarkdownConversionSettings
@@ -205,6 +241,7 @@ internal static class PageExportCommand
                 IncludeCreatedDate = options.DatesMode is DatesMode.Both or DatesMode.Created,
                 IncludeUpdatedDate = options.DatesMode is DatesMode.Both or DatesMode.Updated,
                 UtcDates = options.UtcDates,
+                NewLine = newLine,
             };
 
             content = converter.Convert(pageXml, settings);
@@ -212,7 +249,7 @@ internal static class PageExportCommand
         }
         else
         {
-            content = XDocument.Parse(pageXml).ToString();
+            content = NormalizeLineEndings(XDocument.Parse(pageXml).ToString(), newLine);
             extension = ".xml";
         }
 

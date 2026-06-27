@@ -47,6 +47,32 @@ public class OneNotePageToMarkdownConverterTests
     }
 
     [Test]
+    [Arguments("\n")]
+    [Arguments("\r\n")]
+    public async Task LineEndings(string newLine)
+    {
+        var xml = WrapPage("""
+            <one:OE>
+              <one:T><![CDATA[Hello, world!]]></one:T>
+            </one:OE>
+            <one:OE>
+              <one:T><![CDATA[Second paragraph.]]></one:T>
+            </one:OE>
+            """);
+
+        var converter = new OneNotePageToMarkdownConverter(_ => { });
+        var result = converter.Convert(
+            xml,
+            new MarkdownConversionSettings { IncludeTitleHeading = true, NewLine = newLine });
+
+        await Assert.That(result).Contains(newLine);
+        if (newLine == "\n")
+            await Assert.That(result).DoesNotContain("\r");
+        else
+            await Assert.That(result.Replace("\r\n", "")).DoesNotContain("\r");
+    }
+
+    [Test]
     public Task Headings()
     {
         var xml = WrapPage("""
