@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
+using HtmlAgilityPack;
 using ReverseMarkdown;
 
 namespace BlueMarsh.OneNote.CommandLine.Export;
@@ -456,139 +457,125 @@ internal sealed partial class OneNotePageToMarkdownConverter
         return string.Join("", parts).Trim();
     }
 
-    private static readonly Converter ReverseMarkdownConverter = new(new Config
+    private static readonly Converter ReverseMarkdownConverter = CreateReverseMarkdownConverter();
+
+    private static Converter CreateReverseMarkdownConverter()
     {
-        UnknownTags = Config.UnknownTagsOption.Bypass,
-        GithubFlavored = true,
-        SmartHrefHandling = false,
-    });
+        var config = new Config
+        {
+            UnknownTags = Config.UnknownTagsOption.Bypass,
+            GithubFlavored = true,
+            SmartHrefHandling = false,
+        };
+
+        // Superscript/subscript have no Markdown equivalent, so allow them through as raw HTML.
+        config.PassThroughTags.Add("sup");
+        config.PassThroughTags.Add("sub");
+
+        // Highlighted text is rendered with == markers (e.g. ==text==). The replacer wraps the
+        // converted inner content with the given string as both prefix and suffix.
+        config.UnknownTagsReplacer["mark"] = "==";
+
+        return new Converter(config);
+    }
 
     private static string ConvertInlineHtml(string html)
     {
         if (!html.Contains('<'))
             return System.Net.WebUtility.HtmlDecode(html);
 
-        // First convert formatting spans (bold, italic, strikethrough) to semantic tags.
-        // This eliminates nested <span> tags that would confuse highlight extraction.
-        var normalized = NormalizeSpanStyles(html);
+        // Rewrite OneNote's inline-styled <span> elements into semantic tags
+        // (<mark>, <strong>, <em>, <del>, <sup>, <sub>) that ReverseMarkdown understands.
+        var normalized = NormalizeHtml(html);
 
-        // Handle highlight spans — now safe because inner spans are already semantic tags.
-        // Recursively convert inner content, then wrap with == markers.
-        normalized = HighlightSpanRegex().Replace(normalized, match =>
-        {
-            var inner = ConvertInlineHtml(match.Groups[1].Value);
-            return $"=={inner}==";
-        });
-
-        // Handle superscript/subscript (vertical-align) spans. Convert them to placeholder
-        // tokens so ReverseMarkdown does not strip them, then restore <sup>/<sub> at the end.
-        normalized = SuperscriptSpanRegex().Replace(normalized, match =>
-        {
-            var inner = ConvertInlineHtml(match.Groups[1].Value);
-            return $"{SupOpenPlaceholder}{inner}{SupClosePlaceholder}";
-        });
-        normalized = SubscriptSpanRegex().Replace(normalized, match =>
-        {
-            var inner = ConvertInlineHtml(match.Groups[1].Value);
-            return $"{SubOpenPlaceholder}{inner}{SubClosePlaceholder}";
-        });
-
-        string result;
         if (!normalized.Contains('<'))
         {
-            // No tags remain (only plain text and/or sup/sub placeholders); still decode
-            // any HTML entities that were part of the surrounding text.
-            result = System.Net.WebUtility.HtmlDecode(normalized);
-        }
-        else
-        {
-            var markdown = ReverseMarkdownConverter.Convert(normalized);
-
-            // ReverseMarkdown may add trailing newlines; trim for inline use.
-            // Decode any HTML entities it preserved (e.g. &lt; &gt; around autolinks,
-            // and entities inside href values).
-            result = System.Net.WebUtility.HtmlDecode(markdown.TrimEnd('\r', '\n'));
+            // No tags remain (e.g. a color-only span was unwrapped); still decode any HTML
+            // entities that were part of the surrounding text.
+            return System.Net.WebUtility.HtmlDecode(normalized);
         }
 
-        return RestoreSupSubPlaceholders(result);
+        var markdown = ReverseMarkdownConverter.Convert(normalized);
+
+        // ReverseMarkdown may add trailing newlines; trim for inline use. Decode any HTML
+        // entities it preserved (e.g. &lt; &gt; around autolinks, and entities inside hrefs).
+        return System.Net.WebUtility.HtmlDecode(markdown.TrimEnd('\r', '\n'));
     }
 
-    private const string SupOpenPlaceholder = "\uE000sup\uE000";
-    private const string SupClosePlaceholder = "\uE000/sup\uE000";
-    private const string SubOpenPlaceholder = "\uE001sub\uE001";
-    private const string SubClosePlaceholder = "\uE001/sub\uE001";
-
-    private static string RestoreSupSubPlaceholders(string text)
+    // Parses the HTML fragment and rewrites OneNote's inline-styled <span> elements into the
+    // equivalent semantic HTML tags. Spans whose styles aren't recognized (e.g. a bare color)
+    // are unwrapped, leaving their content in place.
+    private static string NormalizeHtml(string html)
     {
-        return text
-            .Replace(SupOpenPlaceholder, "<sup>")
-            .Replace(SupClosePlaceholder, "</sup>")
-            .Replace(SubOpenPlaceholder, "<sub>")
-            .Replace(SubClosePlaceholder, "</sub>");
+        var doc = new HtmlDocument();
+        doc.LoadHtml(html);
+        NormalizeSpans(doc.DocumentNode);
+        return doc.DocumentNode.InnerHtml;
     }
 
-    [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*['""][^'""]*vertical-align:\s*super[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
-    private static partial Regex SuperscriptSpanRegex();
-
-    [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*['""][^'""]*vertical-align:\s*sub[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
-    private static partial Regex SubscriptSpanRegex();
-
-    [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*['""]([^'""]*)['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
-    private static partial Regex SpanStyleRegex();
-
-    [GeneratedRegex(
-        @"<span\s[^>]*style\s*=\s*['""][^'""]*(?:background-color|background:)[^'""]*['""][^>]*>([^<]*(?:<(?!/?span[\s>/])[^<]*)*)</span>",
-        RegexOptions.IgnoreCase | RegexOptions.Singleline)]
-    private static partial Regex HighlightSpanRegex();
-
-    private static string NormalizeSpanStyles(string html)
+    private static void NormalizeSpans(HtmlNode node)
     {
-        // Repeatedly replace styled spans with semantic HTML tags until none remain
-        string previous;
-        var result = html;
-        do
+        // Process children first; a styled span may be nested inside another span.
+        foreach (var child in node.ChildNodes.ToList())
+            NormalizeSpans(child);
+
+        if (node.NodeType != HtmlNodeType.Element ||
+            !node.Name.Equals("span", StringComparison.OrdinalIgnoreCase))
         {
-            previous = result;
-            result = SpanStyleRegex().Replace(previous, match =>
-            {
-                var style = match.Groups[1].Value.ToLowerInvariant();
-                var inner = match.Groups[2].Value;
+            return;
+        }
 
-                var open = new StringBuilder();
-                var close = new StringBuilder();
+        var tags = SemanticTagsForStyle(node.GetAttributeValue("style", ""));
+        var parent = node.ParentNode;
+        var children = node.ChildNodes.ToList();
 
-                if (style.Contains("font-weight:bold") || style.Contains("font-weight: bold"))
-                {
-                    open.Append("<strong>");
-                    close.Insert(0, "</strong>");
-                }
+        if (tags.Count == 0)
+        {
+            // Unrecognized style (e.g. color only) — unwrap, keeping the span's content.
+            foreach (var child in children)
+                parent.InsertBefore(child, node);
+            parent.RemoveChild(node);
+            return;
+        }
 
-                if (style.Contains("font-style:italic") || style.Contains("font-style: italic"))
-                {
-                    open.Append("<em>");
-                    close.Insert(0, "</em>");
-                }
+        // Wrap the span's content in nested semantic elements (first tag is outermost).
+        var doc = node.OwnerDocument;
+        var outer = doc.CreateElement(tags[0]);
+        var innermost = outer;
+        for (var i = 1; i < tags.Count; i++)
+        {
+            var inner = doc.CreateElement(tags[i]);
+            innermost.AppendChild(inner);
+            innermost = inner;
+        }
 
-                if (style.Contains("text-decoration:line-through") || style.Contains("text-decoration: line-through"))
-                {
-                    open.Append("<del>");
-                    close.Insert(0, "</del>");
-                }
+        foreach (var child in children)
+            innermost.AppendChild(child);
 
-                if (open.Length == 0)
-                    return match.Value; // unrecognized or highlight style — keep as-is
+        parent.ReplaceChild(outer, node);
+    }
 
-                return $"{open}{inner}{close}";
-            });
-        } while (result != previous);
+    // Maps a CSS style string to the ordered list of semantic HTML tags (outermost first)
+    // that represent it. Returns an empty list if no formatting is recognized.
+    private static List<string> SemanticTagsForStyle(string style)
+    {
+        var s = style.Replace(" ", "").ToLowerInvariant();
+        var tags = new List<string>();
 
-        return result;
+        if (s.Contains("background-color:") || s.Contains("background:"))
+            tags.Add("mark");
+        if (s.Contains("font-weight:bold"))
+            tags.Add("strong");
+        if (s.Contains("font-style:italic"))
+            tags.Add("em");
+        if (s.Contains("text-decoration:line-through"))
+            tags.Add("del");
+        if (s.Contains("vertical-align:super"))
+            tags.Add("sup");
+        if (s.Contains("vertical-align:sub"))
+            tags.Add("sub");
+
+        return tags;
     }
 
     private static bool IsToDoTag(TagDefInfo tagDef)
